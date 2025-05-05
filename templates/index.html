@@ -3,6 +3,9 @@
 <head>
   <title>Option Pricer</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    .model-param { display: none; }
+  </style>
 </head>
 <body>
   <h2>Option Pricer</h2>
@@ -37,6 +40,28 @@
       <option value="pde">PDE (Crank-Nicolson)</option>
     </select><br><br>
 
+    <!-- Extra Inputs (Hidden by default) -->
+
+    <div id="n_steps_container" class="model-param">
+      <label>Tree/Time Steps (n_steps):</label>
+      <input type="number" id="n_steps" value="100" step="10"><br>
+    </div>
+
+    <div id="n_simulations_container" class="model-param">
+      <label>Simulations (n_simulations):</label>
+      <input type="number" id="n_simulations" value="10000" step="1000"><br>
+    </div>
+
+    <div id="x_max_container" class="model-param">
+      <label>Max Asset Price Domain (x_max):</label>
+      <input type="number" id="x_max" value="3" step="0.1"><br>
+    </div>
+
+    <div id="n_t_container" class="model-param">
+      <label>PDE Time Steps (n_t):</label>
+      <input type="number" id="n_t" value="1000" step="100"><br>
+    </div>
+
     <button type="submit">Get Price & Plot</button>
   </form>
 
@@ -44,9 +69,33 @@
   <p id="output"></p>
 
   <script>
+    const modelParamMap = {
+      black_scholes: [],
+      binomial: ["n_steps"],
+      monte_carlo: ["n_steps", "n_simulations"],
+      pde: ["x_max", "n_t"]
+    };
+
+    function updateVisibleInputs() {
+      const selectedModel = document.getElementById("model").value;
+      const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
+
+      allFields.forEach(field => {
+        const el = document.getElementById(`${field}_container`);
+        if (modelParamMap[selectedModel].includes(field)) {
+          el.style.display = "block";
+        } else {
+          el.style.display = "none";
+        }
+      });
+    }
+
+    document.getElementById("model").addEventListener("change", updateVisibleInputs);
+    window.addEventListener("DOMContentLoaded", updateVisibleInputs);
+
     document.getElementById("optionForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-  
+
       const payload = {
         S: parseFloat(document.getElementById("S").value),
         K: parseFloat(document.getElementById("K").value),
@@ -56,34 +105,46 @@
         option_type: document.getElementById("option_type").value,
         model: document.getElementById("model").value
       };
-  
+
+      if (document.getElementById("n_steps_container").style.display !== "none")
+        payload.n_steps = parseInt(document.getElementById("n_steps").value);
+
+      if (document.getElementById("n_simulations_container").style.display !== "none")
+        payload.n_simulations = parseInt(document.getElementById("n_simulations").value);
+
+      if (document.getElementById("x_max_container").style.display !== "none")
+        payload.x_max = parseFloat(document.getElementById("x_max").value);
+
+      if (document.getElementById("n_t_container").style.display !== "none")
+        payload.n_t = parseInt(document.getElementById("n_t").value);
+
       try {
         const res = await fetch("/plot", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
-  
+
         const result = await res.json();
-  
+
         if (result.error) {
           document.getElementById("output").innerText = `Error: ${result.error}`;
-          Plotly.purge("plot");  // optional: clear any existing plot
+          Plotly.purge("plot");
           return;
         }
-  
+
         const plot = JSON.parse(result.plot);
         Plotly.newPlot("plot", plot.data, plot.layout);
-  
+
         if (result.price !== undefined) {
           document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
         }
-  
+
       } catch (err) {
         document.getElementById("output").innerText = "Failed to fetch plot.";
         console.error(err);
       }
     });
-  </script>  
+  </script>
 </body>
 </html>
