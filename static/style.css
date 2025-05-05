@@ -1,4 +1,3 @@
-/* filepath: c:\Users\laksh\OneDrive\Documents\GitHub\OptionsPricing\static\style.css */
 body {
     font-family: sans-serif;
     line-height: 1.6;
@@ -13,7 +12,7 @@ h2 {
     margin-bottom: 30px;
 }
 
-/* Flex container for side-by-side layout */
+/* Side-by-side layout */
 .main-container {
     display: flex;
     flex-wrap: wrap;
@@ -21,9 +20,8 @@ h2 {
     align-items: flex-start;
     max-width: 100%;
     margin: 0 auto;
-    transition: all 0.3s ease-in-out; /* Add transition for smoother resizing */
+    transition: all 0.3s ease-in-out;
 }
-
 #optionForm {
     background: #fff;
     padding: 25px;
@@ -33,7 +31,6 @@ h2 {
     flex-basis: 400px;
     flex-grow: 1;
     transition: all 0.3s ease-in-out;
-    /* Ensure form doesn't grow too tall if content is short */
     align-self: flex-start;
 }
 
@@ -42,7 +39,6 @@ h2 {
     background: #fff;
     padding: 15px;
     border-radius: 8px;
-    /* Removed height: 100%; */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     min-width: 400px;
     display: flex;
@@ -51,11 +47,9 @@ h2 {
     flex-basis: 500px;
     flex-grow: 1.5;
     transition: all 0.3s ease-in-out;
-    /* Give the container a significant minimum height relative to viewport */
-    min-height: 70vh; /* Adjust this value (e.g., 60vh, 80vh) as needed */
+    min-height: 70vh;
 }
-
-/* Styles when plot IS active */
+/* Adjustments for when plot is active */
 .main-container.plot-active #optionForm {
     flex-basis: 280px;
     flex-grow: 1;
@@ -67,17 +61,17 @@ h2 {
     flex-grow: 4;
 }
 
-/* Apply label styles to both forms */
+
 .mode-section label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
 }
 
-/* Apply input/select styles to both forms */
+
 .mode-section input[type="number"],
-.mode-section input[type="text"], /* Add text input for ticker */
-.mode-section input[type="date"], /* Add date input */
+.mode-section input[type="text"], 
+.mode-section input[type="date"],
 .mode-section select {
     width: 100%;
     padding: 10px;
@@ -89,7 +83,7 @@ h2 {
 
 /* Apply button styles to both forms */
 .mode-section button[type="submit"],
-#rerunButton { /* Keep rerunButton specific for now */
+#rerunButton { 
     display: block;
     width: 100%;
     padding: 12px;
@@ -103,14 +97,12 @@ h2 {
     transition: background-color 0.2s ease;
 }
 
-/* Ensure submit buttons take full form width */
 .mode-section button[type="submit"] {
     max-width: 100%;
 }
 
-/* Apply button hover styles to both forms */
 .mode-section button[type="submit"]:hover,
-#rerunButton:hover { /* Keep rerunButton specific for now */
+#rerunButton:hover {
     background-color: #0056b3;
 }
 
@@ -127,26 +119,21 @@ h2 {
 
 #plot {
     width: 100%;
-    /* Removed height: 100%; */
-    /* Make the plot div grow to fill vertical space in plot-container */
     flex-grow: 1;
-    /* Ensure a minimum height for the plot itself */
-    min-height: 350px; /* Adjust as needed */
+    min-height: 350px;
 }
 #output {
     text-align: center;
-    margin-top: 20px; /* Add space above the output */
-    margin-bottom: 10px; /* Add space below the output */
+    margin-top: 20px; 
+    margin-bottom: 10px; 
     font-size: 1.1em;
     font-weight: bold;
     min-height: 1.5em;
     width: 100%;
-    /* Removed height: 100%; */
-    /* Removed display: flex; */
-    flex-shrink: 0; /* Prevent output from shrinking */
+    flex-shrink: 0; 
 }
 #rerunButton {
-    margin: 0 auto 10px auto; /* Adjust margin */
+    margin: 0 auto 10px auto; 
     max-width: 250px;
     width: auto;
     padding-left: 20px;
@@ -160,20 +147,19 @@ h2 {
     cursor: pointer;
     font-size: 16px;
     transition: background-color 0.2s ease;
-    flex-shrink: 0; /* Prevent button from shrinking */
+    flex-shrink: 0;
 }
 #rerunButton:hover {
     background-color: #0056b3;
 }
 
-/* Mode Toggle Styles */
 .mode-toggle {
     text-align: center;
     margin-bottom: 25px;
     background-color: #e9ecef;
     padding: 10px;
     border-radius: 8px;
-    display: inline-block; /* Center the block */
+    display: inline-block;
     left: 50%;
     position: relative;
     transform: translateX(-50%);
@@ -184,7 +170,6 @@ h2 {
     cursor: pointer;
 }
 
-/* Styles for form sections */
 .mode-section {
     background: #fff;
     padding: 25px;
@@ -194,15 +179,9 @@ h2 {
     flex-basis: 400px;
     flex-grow: 1;
     transition: all 0.3s ease-in-out;
-    align-self: flex-start; /* Keep forms aligned top */
+    align-self: flex-start;
 }
 
-/* Specific adjustments for historical form if needed */
-.historical-mode {
-    /* Default styles are fine, adjust flex basis/grow if needed */
-}
-
-/* Display area for calculated historical parameters */
 .calculated-params {
     margin-top: 20px;
     padding: 15px;
