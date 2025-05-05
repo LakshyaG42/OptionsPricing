@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Option Pricer</title>
+  <script>
+    async function getPrice() {
+      const S = parseFloat(document.getElementById("S").value);
+      const response = await fetch("/price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ S: S })
+      });
+      const result = await response.json();
+      document.getElementById("output").innerText = `Price: $${result.price}`;
+    }
+  </script>
+</head>
+<body>
+  <h1>Option Pricer</h1>
+  <label for="S">Stock Price (S):</label>
+  <input id="S" type="number" step="0.01">
+  <button onclick="getPrice()">Get Price</button>
+  <p id="output"></p>
+</body>
+</html>
