@@ -91,35 +91,31 @@ def route_historical_price():
 
         # 3. Calculate Time to Maturity (T)
         T = (expiry_date - quote_date).days / 365.0
-        if T <= 0: # Add check for non-positive time to maturity
+        if T <= 0:
             return jsonify({"error": "Time to maturity must be positive."}), 400
 
         # 4. Fetch Risk-Free Rate (r) using 13-Week Treasury Bill (^IRX)
-        r = 0.05 # Default value
+        r = 0.05 
         try:
             irx = yf.Ticker("^IRX")
             # Fetch data around the quote date, look back 5 days
             hist_r = irx.history(end=quote_date + timedelta(days=1), period="5d", auto_adjust=False)
             if not hist_r.empty and 'Close' in hist_r.columns:
-                # Use the last available closing rate on or before the quote date
                 r_percentage = hist_r['Close'].iloc[-1]
-                r = r_percentage / 100.0 # Convert percentage to decimal
+                r = r_percentage / 100.0 # Convert to decimal
             else:
                  app.logger.warning(f"Could not fetch risk-free rate (^IRX) around {quote_date_str}. Using default 0.")
-                 # Optionally, return an error or use a fallback default
-                 # return jsonify({"error": f"Could not fetch risk-free rate (^IRX) around {quote_date_str}."}), 400
-
+                 
         except Exception as r_err:
             app.logger.error(f"Error fetching risk-free rate (^IRX): {r_err}")
-            # Optionally, return an error or use a fallback default
-            # return jsonify({"error": "Failed to fetch risk-free rate."}), 500
-            r = 0.05 # Fallback to fixed rate on error
+            r = 0.05 
             app.logger.warning(f"Using fallback risk-free rate: {r}")
 
-        # Convert exercise style for model functions
         american = (exercise_style == 'american')
         print(f"Exercise Style: {exercise_style}, American: {american}")
-        # --- Prepare data for plotting function ---
+
+
+        # PLOTTING LOGIC
         plot_data = {
             "S": S,
             "K": K,
