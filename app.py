@@ -50,6 +50,7 @@ def route_historical_price():
     K = data.get("K")
     option_type = data.get("option_type", "call")
     model = data.get("model", "black_scholes")
+    exercise_style = data.get("exercise_style", "european")
 
     # Basic Input Validation
     if not all([ticker_str, quote_date_str, expiry_date_str, K]):
@@ -115,6 +116,9 @@ def route_historical_price():
             r = 0.05 # Fallback to fixed rate on error
             app.logger.warning(f"Using fallback risk-free rate: {r}")
 
+        # Convert exercise style for model functions
+        american = (exercise_style == 'american')
+        print(f"Exercise Style: {exercise_style}, American: {american}")
         # --- Prepare data for plotting function ---
         plot_data = {
             "S": S,
@@ -123,6 +127,7 @@ def route_historical_price():
             "r": r,
             "sigma": sigma,
             "option_type": option_type,
+            "exercise_style": exercise_style
         }
 
         # --- Call Pricing Model & Generate Plot ---
@@ -131,15 +136,28 @@ def route_historical_price():
         plot_result = {}
 
         if model == "black_scholes":
+            if american:
+                return jsonify({"error": "Black-Scholes model only supports European options."}), 400
             plot_result = plot_black_scholes(plot_data)
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
         elif model == "binomial":
             n_steps = data.get("n_steps", 100)
-            american = False
             plot_data["n_steps"] = n_steps
-            plot_data["exercise_style"] = 'european'
             plot_result = plot_binomial(plot_data)
+            price = plot_result.get("price")
+            plot_json = plot_result.get("plot")
+        elif model == "monte_carlo":
+             return jsonify({"error": "Monte Carlo model is not implemented for historical pricing yet."}), 400
+        elif model == "pde":
+            if american:
+                app.logger.warning("PDE model requested with American style, forcing European.")
+                plot_data["exercise_style"] = 'european'
+            n_t = data.get("n_t", 1000)
+            x_max = data.get("x_max", 200 if option_type == 'call' else 3.0)
+            plot_data["n_t"] = n_t
+            plot_data["x_max"] = x_max
+            plot_result = plot_pde(plot_data)
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
         else:
@@ -225,21 +243,25 @@ def plot_binomial(data):
 
 def plot_pde(data):
     S_user = data["S"]
-    K = data["K"]
+    K = float(data["K"])
     T = data["T"]
     r = data["r"]
     sigma = data["sigma"]
-    x_max = data.get("x_max", 3.0)
+    x_max_default = 200 if data.get("option_type", "call") == 'call' else 3.0
+    x_max = data.get("x_max", x_max_default)
     n_t = data.get("n_t", 1000)
 
     option_type = data.get("option_type", "call")
+
     if option_type == "call":
         x, V, user_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t)
     else:
         x, V, user_price = crank_nicolson_put(S_user, K, sigma, T, x_max=x_max, N_t=n_t)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=V, mode='lines+markers', name='CN Price'))
+    fig.add_trace(go.Scatter(x=x, y=V, mode='lines', name='CN Price'))
+    fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
+                             mode='markers', marker=dict(color='red', size=10), name='Current S'))
     fig.update_layout(title='Crank–Nicolson Option Price',
                       xaxis_title='Stock Price (S)',
                       yaxis_title='Option Price')

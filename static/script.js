@@ -30,6 +30,8 @@ const modelParamMap = {
   const manualForm = document.getElementById("optionForm");
   const historicalForm = document.getElementById("historicalForm");
   const modeRadios = document.querySelectorAll('input[name="mode"]');
+  const historicalModelSelect = document.getElementById("model_historical");
+  const historicalExerciseStyleSelect = document.getElementById("exercise_style_historical");
 
   function handleModeChange() {
     const selectedMode = document.querySelector('input[name="mode"]:checked').value;
@@ -40,6 +42,7 @@ const modelParamMap = {
         mainContainer.classList.add('manual-active');
         // Clear historical results if switching away
         clearHistoricalResults();
+        updateHistoricalVisibleInputs(); // Reset historical visibility rules
     } else { // historical mode
         manualForm.style.display = 'none';
         historicalForm.style.display = 'block';
@@ -50,13 +53,14 @@ const modelParamMap = {
         document.getElementById("output").innerText = "";
         mainContainer.classList.remove("plot-active"); // Remove class used by manual plot
         rerunButton.style.display = 'none';
+        updateVisibleInputs(); // Reset manual visibility rules
+        updateHistoricalVisibleInputs(); // Apply historical visibility rules
     }
   }
 
   modeRadios.forEach(radio => {
       radio.addEventListener('change', handleModeChange);
   });
-
 
   function updateVisibleInputs() {
     // Get elements specifically from the manual form
@@ -107,11 +111,46 @@ const modelParamMap = {
     }
 }
 
+// --- New Function for Historical Form Visibility ---
+function updateHistoricalVisibleInputs() {
+    const selectedModelEl = document.getElementById("model_historical");
+    const exerciseStyleSelectEl = document.getElementById("exercise_style_historical");
+
+    // Check if elements exist
+    if (!selectedModelEl || !exerciseStyleSelectEl) {
+        // console.warn("Historical form elements not found for updateHistoricalVisibleInputs");
+        return;
+    }
+
+    const selectedModel = selectedModelEl.value;
+    const americanOption = exerciseStyleSelectEl.querySelector('option[value="american"]');
+
+    // Hide American option for Black-Scholes/PDE in historical mode
+    if (americanOption) {
+        if (selectedModel === "black_scholes" || selectedModel === "pde") {
+            americanOption.style.display = "none";
+            if (exerciseStyleSelectEl.value === "american") {
+                exerciseStyleSelectEl.value = "european"; // Reset if invalid selection
+            }
+        } else {
+            americanOption.style.display = ""; // Show for other models (Binomial, MC)
+        }
+    }
+}
+
   const manualModelSelect = document.getElementById("model_manual");
   if (manualModelSelect) {
       manualModelSelect.addEventListener("change", updateVisibleInputs);
   }
-  window.addEventListener("DOMContentLoaded", updateVisibleInputs);
+  // Add listener for historical model change
+  if (historicalModelSelect) {
+      historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+      updateVisibleInputs();
+      updateHistoricalVisibleInputs(); // Also run historical check on load
+  });
 
   async function handleManualFormSubmit() {
     const payload = {
@@ -203,7 +242,7 @@ const modelParamMap = {
     }
 }
 
-// Historical Form Submission (New Logic)
+// Historical Form Submission (Updated Logic)
 async function handleHistoricalFormSubmit() {
     const payload = {
         ticker: document.getElementById("ticker").value,
@@ -211,7 +250,8 @@ async function handleHistoricalFormSubmit() {
         expiry_date: document.getElementById("expiry_date").value,
         K: parseFloat(document.getElementById("K_historical").value), // Use historical ID
         option_type: document.getElementById("option_type_historical").value, // Use historical ID
-        model: document.getElementById("model_historical").value // Use historical ID
+        model: document.getElementById("model_historical").value, // Use historical ID
+        exercise_style: document.getElementById("exercise_style_historical").value // Added
     };
 
     // Basic validation
@@ -307,7 +347,6 @@ function clearHistoricalResults() {
 document.addEventListener("DOMContentLoaded", () => {
   // Initial setup
   handleModeChange(); // Set initial visibility based on default checked radio
-  updateVisibleInputs(); // Run for manual form on page load
 
   // Listener for manual model change
   const manualModelSelect = document.getElementById("model_manual");
@@ -315,6 +354,13 @@ document.addEventListener("DOMContentLoaded", () => {
       manualModelSelect.addEventListener("change", updateVisibleInputs);
   } else {
       console.error("Manual model select not found!");
+  }
+
+  // Add listener for historical model change
+  if (historicalModelSelect) {
+      historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
+  } else {
+      console.error("Historical model select not found!");
   }
 
   // Manual form submission listener
@@ -347,8 +393,4 @@ document.addEventListener("DOMContentLoaded", () => {
           }
       });
   }
-
-  // Set default dates for historical mode (optional, improves UX)
-  // ... (keep date setting logic) ...
-
 });

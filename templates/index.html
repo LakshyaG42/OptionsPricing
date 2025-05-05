@@ -107,7 +107,15 @@
             <select id="model_historical">
                 <option value="black_scholes">Black-Scholes</option>
                 <option value="binomial">Binomial</option>
+                <option value="monte_carlo">Monte Carlo</option>
+                <option value="pde">PDE (Crank-Nicolson)</option>
             </select><br><br>
+
+            <label>Exercise Style:</label>
+            <select id="exercise_style_historical">
+                <option value="european">European</option>
+                <option value="american">American</option>
+            </select><br>
 
             <button type="submit">Get Historical Price</button>
         </form>
