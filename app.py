@@ -57,5 +57,37 @@ def plot_black_scholes(data):
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
     return {"plot": graphJSON, "price": price_at_S}
 
+
+def plot_binomial(data):
+    S_user = data["S"]
+    K = data["K"]
+    T = data["T"]
+    r = data["r"]
+    sigma = data["sigma"]
+    option_type = data.get("option_type", "call")
+    n_steps = data.get("n_steps", 100)
+    american = data.get("american", False)
+
+    # Vary S from 50 to 150 to visualize
+    S_range = list(range(50, 151, 5))
+    prices = [
+        binomial_price(S, K, T, r, sigma, n_steps=n_steps, option_type=option_type, american=american)
+        for S in S_range
+    ]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=S_range, y=prices, mode='lines+markers', name='Binomial Price'))
+    fig.update_layout(title='Binomial Option Price',
+                      xaxis_title='Stock Price (S)',
+                      yaxis_title='Option Price')
+
+    user_price = binomial_price(S_user, K, T, r, sigma, n_steps=n_steps, option_type=option_type, american=american)
+
+    return {
+        "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
+        "price": user_price
+    }
+
+
 if __name__ == "__main__":
     app.run(debug=True)
