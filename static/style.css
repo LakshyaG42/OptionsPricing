@@ -1,0 +1,161 @@
+/* filepath: c:\Users\laksh\OneDrive\Documents\GitHub\OptionsPricing\static\style.css */
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    margin: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h2 {
+    color: #0056b3;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* Flex container for side-by-side layout */
+.main-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-start;
+    max-width: 100%;
+    margin: 0 auto;
+    transition: all 0.3s ease-in-out; /* Add transition for smoother resizing */
+}
+
+#optionForm {
+    background: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    min-width: 300px;
+    flex-basis: 400px;
+    flex-grow: 1;
+    transition: all 0.3s ease-in-out;
+    /* Ensure form doesn't grow too tall if content is short */
+    align-self: flex-start;
+}
+
+/* Container for plot and results */
+.plot-container {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    /* Removed height: 100%; */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    min-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-basis: 500px;
+    flex-grow: 1.5;
+    transition: all 0.3s ease-in-out;
+    /* Give the container a significant minimum height relative to viewport */
+    min-height: 70vh; /* Adjust this value (e.g., 60vh, 80vh) as needed */
+}
+
+/* Styles when plot IS active */
+.main-container.plot-active #optionForm {
+    flex-basis: 280px;
+    flex-grow: 1;
+    min-width: 280px;
+}
+
+
+.main-container.plot-active .plot-container {
+    flex-basis: 600px;
+    flex-grow: 4;
+}
+#optionForm label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#optionForm input[type="number"],
+#optionForm select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#optionForm button[type="submit"],
+#rerunButton {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px;
+    transition: background-color 0.2s ease;
+}
+
+ #optionForm button[type="submit"] {
+    max-width: 100%; /* Ensure submit button takes full form width */
+ }
+
+
+#optionForm button[type="submit"]:hover,
+#rerunButton:hover {
+    background-color: #0056b3;
+}
+
+.model-param {
+    display: none;
+    background-color: #e9ecef;
+    padding: 15px;
+    margin-top: -10px;
+    margin-bottom: 15px;
+    border-radius: 0 0 4px 4px;
+    border: 1px solid #ccc;
+    border-top: none;
+}
+
+#plot {
+    width: 100%;
+    /* Removed height: 100%; */
+    /* Make the plot div grow to fill vertical space in plot-container */
+    flex-grow: 1;
+    /* Ensure a minimum height for the plot itself */
+    min-height: 350px; /* Adjust as needed */
+}
+#output {
+    text-align: center;
+    margin-top: 20px; /* Add space above the output */
+    margin-bottom: 10px; /* Add space below the output */
+    font-size: 1.1em;
+    font-weight: bold;
+    min-height: 1.5em;
+    width: 100%;
+    /* Removed height: 100%; */
+    /* Removed display: flex; */
+    flex-shrink: 0; /* Prevent output from shrinking */
+}
+#rerunButton {
+    margin: 0 auto 10px auto; /* Adjust margin */
+    max-width: 250px;
+    width: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+    display: block;
+    padding: 12px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0; /* Prevent button from shrinking */
+}
+#rerunButton:hover {
+    background-color: #0056b3;
+}
