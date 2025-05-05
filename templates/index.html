@@ -81,13 +81,32 @@
       pde: ["x_max", "n_t"]
     };
 
-    // ...existing code...
+    let lastSuccessfulPayload = null; // Variable to store the last successful payload
+
+    // Helper function for deep object comparison
+    function deepEqual(obj1, obj2) {
+      if (obj1 === obj2) return true;
+      if (obj1 == null || typeof obj1 !== "object" || obj2 == null || typeof obj2 !== "object") return false;
+
+      const keys1 = Object.keys(obj1);
+      const keys2 = Object.keys(obj2);
+
+      if (keys1.length !== keys2.length) return false;
+
+      for (const key of keys1) {
+        if (!keys2.includes(key) || !deepEqual(obj1[key], obj2[key])) return false;
+      }
+
+      return true;
+    }
+
+
     function updateVisibleInputs() {
         const selectedModel = document.getElementById("model").value;
         const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
         const exerciseStyleSelect = document.getElementById("exercise_style");
         const americanOption = exerciseStyleSelect.querySelector('option[value="american"]');
-  
+
         allFields.forEach(field => {
           const el = document.getElementById(`${field}_container`);
           if (modelParamMap[selectedModel].includes(field)) {
@@ -96,7 +115,7 @@
             el.style.display = "none";
           }
         });
-  
+
         // Hide American option for Black-Scholes
         if (selectedModel === "black_scholes") {
           americanOption.style.display = "none";
@@ -108,13 +127,13 @@
           americanOption.style.display = ""; // Show American option for other models
         }
       }
-  
+
       document.getElementById("model").addEventListener("change", updateVisibleInputs);
       window.addEventListener("DOMContentLoaded", updateVisibleInputs);
-  
+
       document.getElementById("optionForm").addEventListener("submit", async (e) => {
         e.preventDefault();
-  
+
         const payload = {
             S: parseFloat(document.getElementById("S").value),
             K: parseFloat(document.getElementById("K").value),
@@ -123,9 +142,10 @@
             sigma: parseFloat(document.getElementById("sigma").value),
             option_type: document.getElementById("option_type").value,
             model: document.getElementById("model").value,
-            american = (styleDropdown && styleDropdown.value === "american");
+            exercise_style: document.getElementById("exercise_style").value // Corrected this line
           };
 
+      // Add model-specific parameters only if they are visible
       if (document.getElementById("n_steps_container").style.display !== "none")
         payload.n_steps = parseInt(document.getElementById("n_steps").value);
 
@@ -138,7 +158,20 @@
       if (document.getElementById("n_t_container").style.display !== "none")
         payload.n_t = parseInt(document.getElementById("n_t").value);
 
+      // --- Caching Logic ---
+      if (deepEqual(payload, lastSuccessfulPayload)) {
+        console.log("Payload hasn't changed. Using cached result.");
+        // Optionally, provide user feedback that the result is cached
+        // document.getElementById("output").innerText += " (Cached)";
+        return; // Exit without fetching
+      }
+      // --- End Caching Logic ---
+
+
       try {
+        document.getElementById("output").innerText = "Calculating..."; // Indicate processing
+        Plotly.purge("plot"); // Clear previous plot while calculating
+
         const res = await fetch("/plot", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -149,6 +182,7 @@
 
         if (result.error) {
           document.getElementById("output").innerText = `Error: ${result.error}`;
+          lastSuccessfulPayload = null; // Clear cache on error
           Plotly.purge("plot");
           return;
         }
@@ -158,10 +192,15 @@
 
         if (result.price !== undefined) {
           document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
+        } else {
+           document.getElementById("output").innerText = "Plot generated."; // Handle cases where only plot is returned
         }
+
+        lastSuccessfulPayload = payload; // Cache the successful payload
 
       } catch (err) {
         document.getElementById("output").innerText = "Failed to fetch plot.";
+        lastSuccessfulPayload = null; // Clear cache on fetch error
         console.error(err);
       }
     });
