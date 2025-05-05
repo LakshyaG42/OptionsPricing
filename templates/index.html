@@ -72,7 +72,8 @@
 
   <div id="plot"></div>
   <p id="output"></p>
-
+  <button id="rerunButton" style="display: none;">Rerun Simulations</button>
+  
   <script>
     const modelParamMap = {
       black_scholes: [],
@@ -100,6 +101,7 @@
       return true;
     }
 
+    const rerunButton = document.getElementById("rerunButton"); // Get the button
 
     function updateVisibleInputs() {
         const selectedModel = document.getElementById("model").value;
@@ -119,21 +121,24 @@
         // Hide American option for Black-Scholes
         if (selectedModel === "black_scholes") {
           americanOption.style.display = "none";
-          // If American was selected, switch to European
           if (exerciseStyleSelect.value === "american") {
             exerciseStyleSelect.value = "european";
           }
         } else {
-          americanOption.style.display = ""; // Show American option for other models
+          americanOption.style.display = "";
+        }
+
+        // Hide rerun button if model changes
+        if (selectedModel !== "monte_carlo") {
+            rerunButton.style.display = "none";
         }
       }
 
       document.getElementById("model").addEventListener("change", updateVisibleInputs);
       window.addEventListener("DOMContentLoaded", updateVisibleInputs);
 
-      document.getElementById("optionForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-
+      // Function to handle the form submission logic
+      async function handleFormSubmit() {
         const payload = {
             S: parseFloat(document.getElementById("S").value),
             K: parseFloat(document.getElementById("K").value),
@@ -142,68 +147,95 @@
             sigma: parseFloat(document.getElementById("sigma").value),
             option_type: document.getElementById("option_type").value,
             model: document.getElementById("model").value,
-            exercise_style: document.getElementById("exercise_style").value // Corrected this line
+            exercise_style: document.getElementById("exercise_style").value
           };
 
-      // Add model-specific parameters only if they are visible
-      if (document.getElementById("n_steps_container").style.display !== "none")
-        payload.n_steps = parseInt(document.getElementById("n_steps").value);
+        // Add model-specific parameters only if they are visible
+        if (document.getElementById("n_steps_container").style.display !== "none")
+          payload.n_steps = parseInt(document.getElementById("n_steps").value);
 
-      if (document.getElementById("n_simulations_container").style.display !== "none")
-        payload.n_simulations = parseInt(document.getElementById("n_simulations").value);
+        if (document.getElementById("n_simulations_container").style.display !== "none")
+          payload.n_simulations = parseInt(document.getElementById("n_simulations").value);
 
-      if (document.getElementById("x_max_container").style.display !== "none")
-        payload.x_max = parseFloat(document.getElementById("x_max").value);
+        if (document.getElementById("x_max_container").style.display !== "none")
+          payload.x_max = parseFloat(document.getElementById("x_max").value);
 
-      if (document.getElementById("n_t_container").style.display !== "none")
-        payload.n_t = parseInt(document.getElementById("n_t").value);
+        if (document.getElementById("n_t_container").style.display !== "none")
+          payload.n_t = parseInt(document.getElementById("n_t").value);
 
-      // --- Caching Logic ---
-      if (deepEqual(payload, lastSuccessfulPayload)) {
-        console.log("Payload hasn't changed. Using cached result.");
-        // Optionally, provide user feedback that the result is cached
-        // document.getElementById("output").innerText += " (Cached)";
-        return; // Exit without fetching
-      }
-      // --- End Caching Logic ---
+        // --- Caching Logic ---
+        if (deepEqual(payload, lastSuccessfulPayload)) {
+          console.log("Payload hasn't changed. Using cached result.");
+          // Ensure rerun button visibility is correct even when cached
+          if (payload.model === "monte_carlo") {
+              rerunButton.style.display = "block";
+          } else {
+              rerunButton.style.display = "none";
+          }
+          return; // Exit without fetching
+        }
+        // --- End Caching Logic ---
 
-
-      try {
-        document.getElementById("output").innerText = "Calculating..."; // Indicate processing
-        Plotly.purge("plot"); // Clear previous plot while calculating
-
-        const res = await fetch("/plot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-
-        const result = await res.json();
-
-        if (result.error) {
-          document.getElementById("output").innerText = `Error: ${result.error}`;
-          lastSuccessfulPayload = null; // Clear cache on error
+        try {
+          document.getElementById("output").innerText = "Calculating...";
           Plotly.purge("plot");
-          return;
+          rerunButton.style.display = "none"; // Hide rerun button during calculation
+
+          const res = await fetch("/plot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          const result = await res.json();
+
+          if (result.error) {
+            document.getElementById("output").innerText = `Error: ${result.error}`;
+            lastSuccessfulPayload = null;
+            Plotly.purge("plot");
+            rerunButton.style.display = "none"; // Hide on error
+            return;
+          }
+
+          const plot = JSON.parse(result.plot);
+          Plotly.newPlot("plot", plot.data, plot.layout);
+
+          if (result.price !== undefined) {
+            document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
+          } else {
+             document.getElementById("output").innerText = "Plot generated.";
+          }
+
+          lastSuccessfulPayload = payload; // Cache the successful payload
+
+          // Show rerun button ONLY if the model was Monte Carlo
+          if (payload.model === "monte_carlo") {
+            rerunButton.style.display = "block";
+          } else {
+            rerunButton.style.display = "none";
+          }
+
+        } catch (err) {
+          document.getElementById("output").innerText = "Failed to fetch plot.";
+          lastSuccessfulPayload = null;
+          rerunButton.style.display = "none"; // Hide on fetch error
+          console.error(err);
         }
-
-        const plot = JSON.parse(result.plot);
-        Plotly.newPlot("plot", plot.data, plot.layout);
-
-        if (result.price !== undefined) {
-          document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
-        } else {
-           document.getElementById("output").innerText = "Plot generated."; // Handle cases where only plot is returned
-        }
-
-        lastSuccessfulPayload = payload; // Cache the successful payload
-
-      } catch (err) {
-        document.getElementById("output").innerText = "Failed to fetch plot.";
-        lastSuccessfulPayload = null; // Clear cache on fetch error
-        console.error(err);
       }
-    });
+
+      // Original form submit listener
+      document.getElementById("optionForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        handleFormSubmit(); // Call the submission logic function
+      });
+
+      // Rerun button click listener
+      rerunButton.addEventListener("click", () => {
+        lastSuccessfulPayload = null; // Clear cache to force refetch
+        console.log("Rerunning Monte Carlo simulation...");
+        handleFormSubmit(); // Call the submission logic function again
+      });
+
   </script>
 </body>
 </html>
