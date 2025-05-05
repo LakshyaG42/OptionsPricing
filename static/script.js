@@ -25,8 +25,8 @@ const modelParamMap = {
     return true;
   }
 
-  const rerunButton = document.getElementById("rerunButton"); // Get the button
-  const mainContainer = document.querySelector(".main-container"); // Get the main container
+  const rerunButton = document.getElementById("rerunButton");
+  const mainContainer = document.querySelector(".main-container");
   const manualForm = document.getElementById("optionForm");
   const historicalForm = document.getElementById("historicalForm");
   const modeRadios = document.querySelectorAll('input[name="mode"]');
@@ -38,23 +38,23 @@ const modelParamMap = {
     if (selectedMode === 'manual') {
         manualForm.style.display = 'block';
         historicalForm.style.display = 'none';
-        mainContainer.classList.remove('historical-active'); // Optional class for styling
         mainContainer.classList.add('manual-active');
-        // Clear historical results if switching away
         clearHistoricalResults();
-        updateHistoricalVisibleInputs(); // Reset historical visibility rules
-    } else { // historical mode
+        updateHistoricalVisibleInputs(); 
+    } else { 
+      // historical mode
         manualForm.style.display = 'none';
         historicalForm.style.display = 'block';
         mainContainer.classList.remove('manual-active');
-        mainContainer.classList.add('historical-active'); // Optional class for styling
+        mainContainer.classList.add('historical-active');
+
         // Clear manual plot/results if switching away
         Plotly.purge("plot");
         document.getElementById("output").innerText = "";
-        mainContainer.classList.remove("plot-active"); // Remove class used by manual plot
+        mainContainer.classList.remove("plot-active"); 
         rerunButton.style.display = 'none';
-        updateVisibleInputs(); // Reset manual visibility rules
-        updateHistoricalVisibleInputs(); // Apply historical visibility rules
+        updateVisibleInputs(); 
+        updateHistoricalVisibleInputs();
     }
   }
 
@@ -63,13 +63,10 @@ const modelParamMap = {
   });
 
   function updateVisibleInputs() {
-    // Get elements specifically from the manual form
     const selectedModelEl = document.getElementById("model_manual");
     const exerciseStyleSelectEl = document.getElementById("exercise_style_manual");
-
-    // Check if elements exist before proceeding (important for initial load/mode switching)
     if (!selectedModelEl || !exerciseStyleSelectEl) {
-        // console.warn("Manual form elements not found for updateVisibleInputs");
+        console.warn("Manual form elements not found for updateVisibleInputs");
         return;
     }
 
@@ -78,34 +75,30 @@ const modelParamMap = {
     const americanOption = exerciseStyleSelectEl.querySelector('option[value="american"]');
 
     allFields.forEach(field => {
-        // Use the specific container IDs
         const el = document.getElementById(`${field}_container`);
-        if (el) { // Check if element exists
-             // Use optional chaining on modelParamMap
+        if (el) { 
              if (modelParamMap[selectedModel]?.includes(field)) {
                 el.style.display = "block";
             } else {
                 el.style.display = "none";
             }
         } else {
-            // console.warn(`Element container not found: ${field}_container`);
+           console.warn(`Element container not found: ${field}_container`);
         }
     });
 
     // Hide American option for Black-Scholes/PDE in manual mode
-    if (americanOption) { // Check if the option element exists
+    if (americanOption) {
         if (selectedModel === "black_scholes" || selectedModel === "pde") {
             americanOption.style.display = "none";
             if (exerciseStyleSelectEl.value === "american") {
-                exerciseStyleSelectEl.value = "european"; // Reset if invalid selection
+                exerciseStyleSelectEl.value = "european"; 
             }
         } else {
-            americanOption.style.display = ""; // Show for other models
+            americanOption.style.display = "";
         }
     }
 
-    // Hide rerun button if manual model changes (only relevant if MC plot exists)
-    // This might be better handled within the form submission logic
     if (selectedModel !== "monte_carlo") {
         rerunButton.style.display = "none";
     }
@@ -116,24 +109,23 @@ function updateHistoricalVisibleInputs() {
     const selectedModelEl = document.getElementById("model_historical");
     const exerciseStyleSelectEl = document.getElementById("exercise_style_historical");
 
-    // Check if elements exist
+    // Check if elements exist before proceeding (important for initial load/mode switching)
     if (!selectedModelEl || !exerciseStyleSelectEl) {
-        // console.warn("Historical form elements not found for updateHistoricalVisibleInputs");
+        console.warn("Historical form elements not found for updateHistoricalVisibleInputs");
         return;
     }
 
     const selectedModel = selectedModelEl.value;
     const americanOption = exerciseStyleSelectEl.querySelector('option[value="american"]');
 
-    // Hide American option for Black-Scholes/PDE in historical mode
     if (americanOption) {
         if (selectedModel === "black_scholes" || selectedModel === "pde") {
             americanOption.style.display = "none";
             if (exerciseStyleSelectEl.value === "american") {
-                exerciseStyleSelectEl.value = "european"; // Reset if invalid selection
+                exerciseStyleSelectEl.value = "european";
             }
         } else {
-            americanOption.style.display = ""; // Show for other models (Binomial, MC)
+            americanOption.style.display = "";
         }
     }
 }
@@ -149,19 +141,19 @@ function updateHistoricalVisibleInputs() {
 
   window.addEventListener("DOMContentLoaded", () => {
       updateVisibleInputs();
-      updateHistoricalVisibleInputs(); // Also run historical check on load
+      updateHistoricalVisibleInputs(); 
   });
 
   async function handleManualFormSubmit() {
     const payload = {
         S: parseFloat(document.getElementById("S").value),
-        K: parseFloat(document.getElementById("K_manual").value), // Use manual ID
+        K: parseFloat(document.getElementById("K_manual").value),
         T: parseFloat(document.getElementById("T").value),
         r: parseFloat(document.getElementById("r").value),
         sigma: parseFloat(document.getElementById("sigma").value),
-        option_type: document.getElementById("option_type_manual").value, // Use manual ID
-        model: document.getElementById("model_manual").value, // Use manual ID
-        exercise_style: document.getElementById("exercise_style_manual").value // Use manual ID
+        option_type: document.getElementById("option_type_manual").value, 
+        model: document.getElementById("model_manual").value, 
+        exercise_style: document.getElementById("exercise_style_manual").value
     };
 
     // Add model-specific parameters
@@ -225,8 +217,7 @@ function updateHistoricalVisibleInputs() {
         }
 
         lastSuccessfulPayload = payload;
-
-        // Show rerun button ONLY if the model was Monte Carlo
+        // Show rerun button only for Monte Carlo model
         if (payload.model === "monte_carlo" && result.plot) {
             rerunButton.style.display = "block";
         } else {
@@ -242,7 +233,7 @@ function updateHistoricalVisibleInputs() {
     }
 }
 
-// Historical Form Submission (Updated Logic)
+// Historical Form Submission
 async function handleHistoricalFormSubmit() {
     const payload = {
         ticker: document.getElementById("ticker").value,
@@ -254,7 +245,6 @@ async function handleHistoricalFormSubmit() {
         exercise_style: document.getElementById("exercise_style_historical").value // Added
     };
 
-    // Basic validation
     if (!payload.ticker || !payload.quote_date || !payload.expiry_date || !payload.K) {
         document.getElementById("output").innerText = "Error: Please fill all historical fields.";
         return;
@@ -267,9 +257,6 @@ async function handleHistoricalFormSubmit() {
      // --- Caching Logic (Historical) ---
      if (deepEqual(payload, lastSuccessfulHistoricalPayload)) {
         console.log("Historical payload hasn't changed. Using cached result.");
-        // Ensure plot-active class is correct if plot exists in cache (though cache doesn't store plot currently)
-        // For simplicity, we might just re-render plot if needed or rely on full fetch
-        // If a plot was previously shown, ensure layout is correct
         if (document.getElementById('plot').children.length > 0) { // Check if plot div has content
              mainContainer.classList.add("plot-active");
         }
