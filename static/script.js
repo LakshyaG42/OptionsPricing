@@ -332,6 +332,25 @@ function clearHistoricalResults() {
 
 // --- Event Listeners ---
 document.addEventListener("DOMContentLoaded", () => {
+  // --- Set Date Defaults and Constraints ---
+  const today = new Date();
+  const todayString = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+  const quoteDateInput = document.getElementById("quote_date");
+  if (quoteDateInput) {
+      quoteDateInput.max = todayString; // Set max date to today
+      quoteDateInput.value = todayString; // Set default value to today
+  }
+
+  const expiryDateInput = document.getElementById("expiry_date");
+  if (expiryDateInput) {
+      const nextYear = new Date(today);
+      nextYear.setFullYear(today.getFullYear() + 1);
+      const nextYearString = nextYear.toISOString().split('T')[0];
+      expiryDateInput.value = nextYearString; // Set default expiry to one year from today
+  }
+  // --- End Date Setup ---
+
   // Initial setup
   handleModeChange(); // Set initial visibility based on default checked radio
 
