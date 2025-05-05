@@ -99,7 +99,7 @@ def plot_pde(data):
 
     option_type = data.get("option_type", "call")
     if option_type == "call":
-        x, V, user_price = crank_nicolson_call(S_user, K, sigma, T, x_max=x_max, N_t=n_t)
+        x, V, user_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t)
     else:
         x, V, user_price = crank_nicolson_put(S_user, K, sigma, T, x_max=x_max, N_t=n_t)
 
