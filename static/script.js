@@ -6,6 +6,7 @@ const modelParamMap = {
   };
 
   let lastSuccessfulPayload = null; // Variable to store the last successful payload
+  let lastSuccessfulHistoricalPayload = null; // Cache for historical mode
 
   // Helper function for deep object comparison
   function deepEqual(obj1, obj2) {
@@ -26,140 +27,328 @@ const modelParamMap = {
 
   const rerunButton = document.getElementById("rerunButton"); // Get the button
   const mainContainer = document.querySelector(".main-container"); // Get the main container
+  const manualForm = document.getElementById("optionForm");
+  const historicalForm = document.getElementById("historicalForm");
+  const modeRadios = document.querySelectorAll('input[name="mode"]');
+
+  function handleModeChange() {
+    const selectedMode = document.querySelector('input[name="mode"]:checked').value;
+    if (selectedMode === 'manual') {
+        manualForm.style.display = 'block';
+        historicalForm.style.display = 'none';
+        mainContainer.classList.remove('historical-active'); // Optional class for styling
+        mainContainer.classList.add('manual-active');
+        // Clear historical results if switching away
+        clearHistoricalResults();
+    } else { // historical mode
+        manualForm.style.display = 'none';
+        historicalForm.style.display = 'block';
+        mainContainer.classList.remove('manual-active');
+        mainContainer.classList.add('historical-active'); // Optional class for styling
+        // Clear manual plot/results if switching away
+        Plotly.purge("plot");
+        document.getElementById("output").innerText = "";
+        mainContainer.classList.remove("plot-active"); // Remove class used by manual plot
+        rerunButton.style.display = 'none';
+    }
+  }
+
+  modeRadios.forEach(radio => {
+      radio.addEventListener('change', handleModeChange);
+  });
+
 
   function updateVisibleInputs() {
-      const selectedModel = document.getElementById("model").value;
-      const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
-      const exerciseStyleSelect = document.getElementById("exercise_style");
-      const americanOption = exerciseStyleSelect.querySelector('option[value="american"]');
+    // Get elements specifically from the manual form
+    const selectedModelEl = document.getElementById("model_manual");
+    const exerciseStyleSelectEl = document.getElementById("exercise_style_manual");
 
-      allFields.forEach(field => {
-        const el = document.getElementById(`${field}_container`);
-        if (modelParamMap[selectedModel].includes(field)) {
-          el.style.display = "block";
-        } else {
-          el.style.display = "none";
-        }
-      });
-
-      // Hide American option for Black-Scholes
-      if (selectedModel === "black_scholes" || selectedModel === "pde") {
-        americanOption.style.display = "none";
-        if (exerciseStyleSelect.value === "american") {
-          exerciseStyleSelect.value = "european";
-        }
-      } else {
-        americanOption.style.display = "";
-      }
-
-      // Hide rerun button if model changes
-      if (selectedModel !== "monte_carlo") {
-          rerunButton.style.display = "none";
-      }
+    // Check if elements exist before proceeding (important for initial load/mode switching)
+    if (!selectedModelEl || !exerciseStyleSelectEl) {
+        // console.warn("Manual form elements not found for updateVisibleInputs");
+        return;
     }
 
-    document.getElementById("model").addEventListener("change", updateVisibleInputs);
-    window.addEventListener("DOMContentLoaded", updateVisibleInputs);
+    const selectedModel = selectedModelEl.value;
+    const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
+    const americanOption = exerciseStyleSelectEl.querySelector('option[value="american"]');
 
-    // Function to handle the form submission logic
-    async function handleFormSubmit() {
-      const payload = {
-          S: parseFloat(document.getElementById("S").value),
-          K: parseFloat(document.getElementById("K").value),
-          T: parseFloat(document.getElementById("T").value),
-          r: parseFloat(document.getElementById("r").value),
-          sigma: parseFloat(document.getElementById("sigma").value),
-          option_type: document.getElementById("option_type").value,
-          model: document.getElementById("model").value,
-          exercise_style: document.getElementById("exercise_style").value
-        };
+    allFields.forEach(field => {
+        // Use the specific container IDs
+        const el = document.getElementById(`${field}_container`);
+        if (el) { // Check if element exists
+             // Use optional chaining on modelParamMap
+             if (modelParamMap[selectedModel]?.includes(field)) {
+                el.style.display = "block";
+            } else {
+                el.style.display = "none";
+            }
+        } else {
+            // console.warn(`Element container not found: ${field}_container`);
+        }
+    });
 
-      // Add model-specific parameters only if they are visible
-      if (document.getElementById("n_steps_container").style.display !== "none")
+    // Hide American option for Black-Scholes/PDE in manual mode
+    if (americanOption) { // Check if the option element exists
+        if (selectedModel === "black_scholes" || selectedModel === "pde") {
+            americanOption.style.display = "none";
+            if (exerciseStyleSelectEl.value === "american") {
+                exerciseStyleSelectEl.value = "european"; // Reset if invalid selection
+            }
+        } else {
+            americanOption.style.display = ""; // Show for other models
+        }
+    }
+
+    // Hide rerun button if manual model changes (only relevant if MC plot exists)
+    // This might be better handled within the form submission logic
+    if (selectedModel !== "monte_carlo") {
+        rerunButton.style.display = "none";
+    }
+}
+
+  const manualModelSelect = document.getElementById("model_manual");
+  if (manualModelSelect) {
+      manualModelSelect.addEventListener("change", updateVisibleInputs);
+  }
+  window.addEventListener("DOMContentLoaded", updateVisibleInputs);
+
+  async function handleManualFormSubmit() {
+    const payload = {
+        S: parseFloat(document.getElementById("S").value),
+        K: parseFloat(document.getElementById("K_manual").value), // Use manual ID
+        T: parseFloat(document.getElementById("T").value),
+        r: parseFloat(document.getElementById("r").value),
+        sigma: parseFloat(document.getElementById("sigma").value),
+        option_type: document.getElementById("option_type_manual").value, // Use manual ID
+        model: document.getElementById("model_manual").value, // Use manual ID
+        exercise_style: document.getElementById("exercise_style_manual").value // Use manual ID
+    };
+
+    // Add model-specific parameters
+    if (document.getElementById("n_steps_container")?.style.display !== "none")
         payload.n_steps = parseInt(document.getElementById("n_steps").value);
-
-      if (document.getElementById("n_simulations_container").style.display !== "none")
+    if (document.getElementById("n_simulations_container")?.style.display !== "none")
         payload.n_simulations = parseInt(document.getElementById("n_simulations").value);
-
-      if (document.getElementById("x_max_container").style.display !== "none")
+    if (document.getElementById("x_max_container")?.style.display !== "none")
         payload.x_max = parseFloat(document.getElementById("x_max").value);
-
-      if (document.getElementById("n_t_container").style.display !== "none")
+    if (document.getElementById("n_t_container")?.style.display !== "none")
         payload.n_t = parseInt(document.getElementById("n_t").value);
 
-      // --- Caching Logic ---
-      if (deepEqual(payload, lastSuccessfulPayload)) {
-        console.log("Payload hasn't changed. Using cached result.");
-        // Ensure rerun button visibility is correct even when cached
-        if (payload.model === "monte_carlo") {
+    // --- Caching Logic (Manual) ---
+    if (deepEqual(payload, lastSuccessfulPayload)) {
+        console.log("Manual payload hasn't changed. Using cached result.");
+        // Ensure plot-active class and rerun button visibility are correct
+        if (lastSuccessfulPayload) mainContainer.classList.add("plot-active");
+        if (payload.model === "monte_carlo") rerunButton.style.display = "block";
+        else rerunButton.style.display = "none";
+        return;
+    }
+    // --- End Caching Logic ---
+
+    try {
+        document.getElementById("output").innerText = "Calculating...";
+        Plotly.purge("plot");
+        rerunButton.style.display = "none";
+        mainContainer.classList.remove("plot-active");
+
+        const res = await fetch("/plot", { // Send to original endpoint
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.error) {
+            document.getElementById("output").innerText = `Error: ${result.error}`;
+            lastSuccessfulPayload = null;
+            Plotly.purge("plot");
+            rerunButton.style.display = "none";
+            mainContainer.classList.remove("plot-active");
+            return;
+        }
+
+        // Plotting logic (assuming /plot returns plot JSON)
+        if (result.plot) {
+            const plot = JSON.parse(result.plot);
+            Plotly.newPlot("plot", plot.data, plot.layout);
+            mainContainer.classList.add("plot-active");
+        } else {
+             Plotly.purge("plot");
+             mainContainer.classList.remove("plot-active");
+        }
+
+        // Display price
+        if (result.price !== undefined) {
+            document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
+        } else {
+            document.getElementById("output").innerText = result.plot ? "Plot generated." : "No price returned.";
+        }
+
+        lastSuccessfulPayload = payload;
+
+        // Show rerun button ONLY if the model was Monte Carlo
+        if (payload.model === "monte_carlo" && result.plot) {
             rerunButton.style.display = "block";
         } else {
             rerunButton.style.display = "none";
         }
-        return; // Exit without fetching
-      }
-      // --- End Caching Logic ---
 
-      try {
-        document.getElementById("output").innerText = "Calculating...";
-        Plotly.purge("plot");
-        rerunButton.style.display = "none"; // Hide rerun button during calculation
+    } catch (err) {
+        document.getElementById("output").innerText = "Failed to fetch plot.";
+        lastSuccessfulPayload = null;
+        rerunButton.style.display = "none";
         mainContainer.classList.remove("plot-active");
+        console.error(err);
+    }
+}
 
-        const res = await fetch("/plot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+// Historical Form Submission (New Logic)
+async function handleHistoricalFormSubmit() {
+    const payload = {
+        ticker: document.getElementById("ticker").value,
+        quote_date: document.getElementById("quote_date").value,
+        expiry_date: document.getElementById("expiry_date").value,
+        K: parseFloat(document.getElementById("K_historical").value), // Use historical ID
+        option_type: document.getElementById("option_type_historical").value, // Use historical ID
+        model: document.getElementById("model_historical").value // Use historical ID
+    };
+
+    // Basic validation
+    if (!payload.ticker || !payload.quote_date || !payload.expiry_date || !payload.K) {
+        document.getElementById("output").innerText = "Error: Please fill all historical fields.";
+        return;
+    }
+     if (payload.expiry_date <= payload.quote_date) {
+        document.getElementById("output").innerText = "Error: Expiry date must be after quote date.";
+        return;
+    }
+
+     // --- Caching Logic (Historical) ---
+     if (deepEqual(payload, lastSuccessfulHistoricalPayload)) {
+        console.log("Historical payload hasn't changed. Using cached result.");
+        // Ensure plot-active class is correct if plot exists in cache (though cache doesn't store plot currently)
+        // For simplicity, we might just re-render plot if needed or rely on full fetch
+        // If a plot was previously shown, ensure layout is correct
+        if (document.getElementById('plot').children.length > 0) { // Check if plot div has content
+             mainContainer.classList.add("plot-active");
+        }
+        return;
+     }
+     // --- End Caching Logic ---
+
+    try {
+        document.getElementById("output").innerText = "Fetching historical data and calculating...";
+        clearHistoricalResults(); // Clear previous calculated params
+        Plotly.purge("plot"); // Clear plot area initially
+        mainContainer.classList.remove("plot-active"); // Remove manual plot class
+
+        const res = await fetch("/historical_price", { // Send to NEW endpoint
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
         });
-
         const result = await res.json();
 
         if (result.error) {
-          document.getElementById("output").innerText = `Error: ${result.error}`;
-          lastSuccessfulPayload = null;
-          Plotly.purge("plot");
-          rerunButton.style.display = "none"; // Hide on error
-          mainContainer.classList.remove("plot-active");
-          return;
+            document.getElementById("output").innerText = `Error: ${result.error}`;
+            lastSuccessfulHistoricalPayload = null;
+            Plotly.purge("plot"); // Ensure plot is cleared on error
+            mainContainer.classList.remove("plot-active");
+            return;
         }
 
-        const plot = JSON.parse(result.plot);
-        Plotly.newPlot("plot", plot.data, plot.layout);
-        mainContainer.classList.add("plot-active");
+        // Display calculated parameters
+        document.getElementById("hist_S").innerText = result.S?.toFixed(2) ?? 'N/A';
+        document.getElementById("hist_sigma").innerText = result.sigma?.toFixed(4) ?? 'N/A';
+        document.getElementById("hist_T").innerText = result.T?.toFixed(4) ?? 'N/A';
+        document.getElementById("hist_r").innerText = result.r?.toFixed(4) ?? 'N/A';
 
-        if (result.price !== undefined) {
-          document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
+        // Display price
+        document.getElementById("output").innerText = `Historical Price: $${result.price?.toFixed(4) ?? 'N/A'}`;
+
+        // Plotting logic for historical data
+        if (result.plot) {
+            try {
+                const plot = JSON.parse(result.plot);
+                Plotly.newPlot("plot", plot.data, plot.layout);
+                mainContainer.classList.add("plot-active"); // Add class to adjust layout
+            } catch (plotError) {
+                console.error("Error parsing or plotting historical plot data:", plotError);
+                Plotly.purge("plot"); // Clear plot on error
+                mainContainer.classList.remove("plot-active");
+            }
         } else {
-           document.getElementById("output").innerText = "Plot generated.";
+             Plotly.purge("plot"); // Clear plot if no plot data received
+             mainContainer.classList.remove("plot-active");
         }
 
-        lastSuccessfulPayload = payload; // Cache the successful payload
 
-        // Show rerun button ONLY if the model was Monte Carlo
-        if (payload.model === "monte_carlo") {
-          rerunButton.style.display = "block";
-        } else {
-          rerunButton.style.display = "none";
-        }
+        lastSuccessfulHistoricalPayload = payload; // Cache successful historical payload
 
-      } catch (err) {
-        document.getElementById("output").innerText = "Failed to fetch plot.";
-        lastSuccessfulPayload = null;
-        rerunButton.style.display = "none"; // Hide on fetch error
+    } catch (err) {
+        document.getElementById("output").innerText = "Failed to fetch historical price.";
+        lastSuccessfulHistoricalPayload = null;
+        Plotly.purge("plot"); // Ensure plot is cleared on fetch error
         mainContainer.classList.remove("plot-active");
         console.error(err);
-      }
     }
+}
 
-    // Original form submit listener
-    document.getElementById("optionForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      handleFormSubmit(); // Call the submission logic function
-    });
+function clearHistoricalResults() {
+     document.getElementById("hist_S").innerText = '--';
+     document.getElementById("hist_sigma").innerText = '--';
+     document.getElementById("hist_T").innerText = '--';
+     document.getElementById("hist_r").innerText = '--';
+}
 
-    // Rerun button click listener
-    rerunButton.addEventListener("click", () => {
-      lastSuccessfulPayload = null; // Clear cache to force refetch
-      console.log("Rerunning Monte Carlo simulation...");
-      handleFormSubmit(); // Call the submission logic function again
-    });
+
+// --- Event Listeners ---
+document.addEventListener("DOMContentLoaded", () => {
+  // Initial setup
+  handleModeChange(); // Set initial visibility based on default checked radio
+  updateVisibleInputs(); // Run for manual form on page load
+
+  // Listener for manual model change
+  const manualModelSelect = document.getElementById("model_manual");
+  if (manualModelSelect) {
+      manualModelSelect.addEventListener("change", updateVisibleInputs);
+  } else {
+      console.error("Manual model select not found!");
+  }
+
+  // Manual form submission listener
+  if (manualForm) {
+      manualForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          handleManualFormSubmit();
+      });
+  } else {
+       console.error("Manual form not found!");
+  }
+
+  // Historical form submission listener
+  if (historicalForm) {
+      historicalForm.addEventListener("submit", (e) => {
+          e.preventDefault();
+          handleHistoricalFormSubmit();
+      });
+  } else {
+       console.error("Historical form not found!");
+  }
+
+  // Rerun button click listener (only relevant for manual Monte Carlo)
+  if (rerunButton) {
+      rerunButton.addEventListener("click", () => {
+          if (document.querySelector('input[name="mode"]:checked').value === 'manual') {
+              lastSuccessfulPayload = null; // Clear manual cache
+              console.log("Rerunning Monte Carlo simulation...");
+              handleManualFormSubmit(); // Resubmit manual form
+          }
+      });
+  }
+
+  // Set default dates for historical mode (optional, improves UX)
+  // ... (keep date setting logic) ...
+
+});

@@ -62,19 +62,23 @@ h2 {
     min-width: 280px;
 }
 
-
 .main-container.plot-active .plot-container {
     flex-basis: 600px;
     flex-grow: 4;
 }
-#optionForm label {
+
+/* Apply label styles to both forms */
+.mode-section label {
     display: block;
     margin-bottom: 5px;
     font-weight: bold;
 }
 
-#optionForm input[type="number"],
-#optionForm select {
+/* Apply input/select styles to both forms */
+.mode-section input[type="number"],
+.mode-section input[type="text"], /* Add text input for ticker */
+.mode-section input[type="date"], /* Add date input */
+.mode-section select {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
@@ -83,8 +87,9 @@ h2 {
     box-sizing: border-box;
 }
 
-#optionForm button[type="submit"],
-#rerunButton {
+/* Apply button styles to both forms */
+.mode-section button[type="submit"],
+#rerunButton { /* Keep rerunButton specific for now */
     display: block;
     width: 100%;
     padding: 12px;
@@ -98,13 +103,14 @@ h2 {
     transition: background-color 0.2s ease;
 }
 
- #optionForm button[type="submit"] {
-    max-width: 100%; /* Ensure submit button takes full form width */
- }
+/* Ensure submit buttons take full form width */
+.mode-section button[type="submit"] {
+    max-width: 100%;
+}
 
-
-#optionForm button[type="submit"]:hover,
-#rerunButton:hover {
+/* Apply button hover styles to both forms */
+.mode-section button[type="submit"]:hover,
+#rerunButton:hover { /* Keep rerunButton specific for now */
     background-color: #0056b3;
 }
 
@@ -158,4 +164,62 @@ h2 {
 }
 #rerunButton:hover {
     background-color: #0056b3;
+}
+
+/* Mode Toggle Styles */
+.mode-toggle {
+    text-align: center;
+    margin-bottom: 25px;
+    background-color: #e9ecef;
+    padding: 10px;
+    border-radius: 8px;
+    display: inline-block; /* Center the block */
+    left: 50%;
+    position: relative;
+    transform: translateX(-50%);
+}
+
+.mode-toggle label {
+    margin: 0 15px;
+    cursor: pointer;
+}
+
+/* Styles for form sections */
+.mode-section {
+    background: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    min-width: 300px;
+    flex-basis: 400px;
+    flex-grow: 1;
+    transition: all 0.3s ease-in-out;
+    align-self: flex-start; /* Keep forms aligned top */
+}
+
+/* Specific adjustments for historical form if needed */
+.historical-mode {
+    /* Default styles are fine, adjust flex basis/grow if needed */
+}
+
+/* Display area for calculated historical parameters */
+.calculated-params {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+}
+.calculated-params h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #495057;
+}
+.calculated-params p {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+.calculated-params span {
+    font-weight: bold;
+    color: #0056b3;
 }

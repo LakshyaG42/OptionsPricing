@@ -4,73 +4,123 @@
   <title>Option Pricer</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <style>
-    .model-param { display: none; }
-  </style>
 </head>
 <body>
   <h2>Option Pricer</h2>
 
+  <!-- Mode Toggle -->
+  <div class="mode-toggle">
+      <label>
+          <input type="radio" name="mode" value="manual" checked> Manual Input
+      </label>
+      <label>
+          <input type="radio" name="mode" value="historical"> Historical Data
+      </label>
+  </div>
+
   <div class="main-container">
-    <form id="optionForm">
-        <label>Stock Price (S):</label>
-        <input type="number" id="S" value="100" step="1" required><br>
+    <!-- Manual Input Form Section -->
+    <div id="optionForm" class="mode-section manual-mode" style="display: block;">
+        <form>
+            <label>Stock Price (S):</label>
+            <input type="number" id="S" value="100" step="1" required><br>
 
-        <label>Strike Price (K):</label>
-        <input type="number" id="K" value="100" step="1" required><br>
+            <label>Strike Price (K):</label>
+            <input type="number" id="K_manual" value="100" step="1" required><br>
 
-        <label>Time to Maturity (T in years):</label>
-        <input type="number" id="T" value="1" step="0.1" required><br>
+            <label>Time to Maturity (T in years):</label>
+            <input type="number" id="T" value="1" step="0.1" required><br>
 
-        <label>Risk-Free Rate (r):</label>
-        <input type="number" id="r" value="0.05" step="0.01" required><br>
+            <label>Risk-Free Rate (r):</label>
+            <input type="number" id="r" value="0.05" step="0.01" required><br>
 
-        <label>Volatility (σ):</label>
-        <input type="number" id="sigma" value="0.2" step="0.01" required><br>
+            <label>Volatility (σ):</label>
+            <input type="number" id="sigma" value="0.2" step="0.01" required><br>
 
-        <label>Option Type:</label>
-        <select id="option_type">
-        <option value="call">Call</option>
-        <option value="put">Put</option>
-        </select><br>
+            <label>Option Type:</label>
+            <select id="option_type_manual">
+            <option value="call">Call</option>
+            <option value="put">Put</option>
+            </select><br>
 
-        <label>Model:</label>
-        <select id="model">
-        <option value="black_scholes">Black-Scholes</option>
-        <option value="binomial">Binomial</option>
-        <option value="monte_carlo">Monte Carlo</option>
-        <option value="pde">PDE (Crank-Nicolson)</option>
-        </select><br><br>
+            <label>Model:</label>
+            <select id="model_manual">
+            <option value="black_scholes">Black-Scholes</option>
+            <option value="binomial">Binomial</option>
+            <option value="monte_carlo">Monte Carlo</option>
+            <option value="pde">PDE (Crank-Nicolson)</option>
+            </select><br><br>
 
-        <!-- Extra Inputs (Hidden by default) -->
+            <!-- Extra Inputs (Hidden by default) -->
 
-        <div id="n_steps_container" class="model-param">
-        <label>Tree/Time Steps (n_steps):</label>
-        <input type="number" id="n_steps" value="100" step="10"><br>
+            <div id="n_steps_container" class="model-param">
+            <label>Tree/Time Steps (n_steps):</label>
+            <input type="number" id="n_steps" value="100" step="10"><br>
+            </div>
+
+            <div id="n_simulations_container" class="model-param">
+            <label>Simulations (n_simulations):</label>
+            <input type="number" id="n_simulations" value="10000" step="1000"><br>
+            </div>
+
+            <div id="x_max_container" class="model-param">
+            <label>Max Asset Price Domain (x_max):</label>
+            <input type="number" id="x_max" value="3" step="0.1"><br>
+            </div>
+
+            <div id="n_t_container" class="model-param">
+            <label>PDE Time Steps (n_t):</label>
+            <input type="number" id="n_t" value="1000" step="100"><br>
+            </div>
+            <label>Exercise Style:</label>
+            <select id="exercise_style_manual">
+                <option value="european">European</option>
+                <option value="american">American</option>
+            </select><br>
+
+            <button type="submit">Get Price & Plot</button>
+        </form>
+    </div>
+
+    <!-- Historical Data Form Section -->
+    <div id="historicalForm" class="mode-section historical-mode" style="display: none;">
+         <form>
+            <label>Ticker Symbol:</label>
+            <input type="text" id="ticker" placeholder="e.g., AAPL" required><br>
+
+            <label>Quote Date:</label>
+            <input type="date" id="quote_date" required><br>
+
+            <label>Expiry Date:</label>
+            <input type="date" id="expiry_date" required><br>
+
+            <label>Strike Price (K):</label>
+            <input type="number" id="K_historical" step="any" required><br>
+
+            <label>Option Type:</label>
+            <select id="option_type_historical">
+                <option value="call">Call</option>
+                <option value="put">Put</option>
+            </select><br>
+
+            <label>Model:</label>
+            <select id="model_historical">
+                <option value="black_scholes">Black-Scholes</option>
+                <option value="binomial">Binomial</option>
+            </select><br><br>
+
+            <button type="submit">Get Historical Price</button>
+        </form>
+
+        <!-- Display Calculated Historical Parameters -->
+        <div class="calculated-params">
+            <h4>Calculated Parameters:</h4>
+            <p>Stock Price (S): <span id="hist_S">--</span></p>
+            <p>Volatility (σ): <span id="hist_sigma">--</span></p>
+            <p>Time to Maturity (T): <span id="hist_T">--</span></p>
+            <p>Risk-Free Rate (r): <span id="hist_r">--</span></p>
         </div>
-
-        <div id="n_simulations_container" class="model-param">
-        <label>Simulations (n_simulations):</label>
-        <input type="number" id="n_simulations" value="10000" step="1000"><br>
-        </div>
-
-        <div id="x_max_container" class="model-param">
-        <label>Max Asset Price Domain (x_max):</label>
-        <input type="number" id="x_max" value="3" step="0.1"><br>
-        </div>
-
-        <div id="n_t_container" class="model-param">
-        <label>PDE Time Steps (n_t):</label>
-        <input type="number" id="n_t" value="1000" step="100"><br>
-        </div>
-        <label>Exercise Style:</label>
-        <select id="exercise_style">
-            <option value="european">European</option>
-            <option value="american">American</option>
-        </select><br>
-
-        <button type="submit">Get Price & Plot</button>
-    </form>
+    </div>
 
     <div class="plot-container">
         <div id="plot"></div>
