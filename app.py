@@ -112,7 +112,6 @@ def route_historical_price():
             app.logger.warning(f"Using fallback risk-free rate: {r}")
 
         american = (exercise_style == 'american')
-        print(f"Exercise Style: {exercise_style}, American: {american}")
 
 
         # PLOTTING LOGIC
