@@ -8,6 +8,7 @@ import plotly.graph_objs as go
 
 # Models
 from models.black_scholes import price_option
+from models.binomial import binomial_price
 
 
 @app.route("/")
@@ -23,8 +24,8 @@ def route_plot():
         return jsonify(plot_black_scholes(data))
     
     elif model == "binomial":
-        # return jsonify(plot_binomial(data))
-        return jsonify({"error": "Binomial plot not implemented yet."})
+        return jsonify(plot_binomial(data))
+        #return jsonify({"error": "Binomial plot not implemented yet."})
     
     elif model == "monte_carlo":
         # return jsonify(plot_monte_carlo(data))
@@ -66,9 +67,7 @@ def plot_binomial(data):
     sigma = data["sigma"]
     option_type = data.get("option_type", "call")
     n_steps = data.get("n_steps", 100)
-    american = data.get("american", False)
-
-    # Vary S from 50 to 150 to visualize
+    american = data.get("exercise_style", 'european') == 'american'
     S_range = list(range(50, 151, 5))
     prices = [
         binomial_price(S, K, T, r, sigma, n_steps=n_steps, option_type=option_type, american=american)

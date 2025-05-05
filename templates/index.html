@@ -81,35 +81,50 @@
       pde: ["x_max", "n_t"]
     };
 
+    // ...existing code...
     function updateVisibleInputs() {
-      const selectedModel = document.getElementById("model").value;
-      const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
-
-      allFields.forEach(field => {
-        const el = document.getElementById(`${field}_container`);
-        if (modelParamMap[selectedModel].includes(field)) {
-          el.style.display = "block";
+        const selectedModel = document.getElementById("model").value;
+        const allFields = ["n_steps", "n_simulations", "x_max", "n_t"];
+        const exerciseStyleSelect = document.getElementById("exercise_style");
+        const americanOption = exerciseStyleSelect.querySelector('option[value="american"]');
+  
+        allFields.forEach(field => {
+          const el = document.getElementById(`${field}_container`);
+          if (modelParamMap[selectedModel].includes(field)) {
+            el.style.display = "block";
+          } else {
+            el.style.display = "none";
+          }
+        });
+  
+        // Hide American option for Black-Scholes
+        if (selectedModel === "black_scholes") {
+          americanOption.style.display = "none";
+          // If American was selected, switch to European
+          if (exerciseStyleSelect.value === "american") {
+            exerciseStyleSelect.value = "european";
+          }
         } else {
-          el.style.display = "none";
+          americanOption.style.display = ""; // Show American option for other models
         }
-      });
-    }
-
-    document.getElementById("model").addEventListener("change", updateVisibleInputs);
-    window.addEventListener("DOMContentLoaded", updateVisibleInputs);
-
-    document.getElementById("optionForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const payload = {
-        S: parseFloat(document.getElementById("S").value),
-        K: parseFloat(document.getElementById("K").value),
-        T: parseFloat(document.getElementById("T").value),
-        r: parseFloat(document.getElementById("r").value),
-        sigma: parseFloat(document.getElementById("sigma").value),
-        option_type: document.getElementById("option_type").value,
-        model: document.getElementById("model").value
-      };
+      }
+  
+      document.getElementById("model").addEventListener("change", updateVisibleInputs);
+      window.addEventListener("DOMContentLoaded", updateVisibleInputs);
+  
+      document.getElementById("optionForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+  
+        const payload = {
+            S: parseFloat(document.getElementById("S").value),
+            K: parseFloat(document.getElementById("K").value),
+            T: parseFloat(document.getElementById("T").value),
+            r: parseFloat(document.getElementById("r").value),
+            sigma: parseFloat(document.getElementById("sigma").value),
+            option_type: document.getElementById("option_type").value,
+            model: document.getElementById("model").value,
+            american = (styleDropdown && styleDropdown.value === "american");
+          };
 
       if (document.getElementById("n_steps_container").style.display !== "none")
         payload.n_steps = parseInt(document.getElementById("n_steps").value);
