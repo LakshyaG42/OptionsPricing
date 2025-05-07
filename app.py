@@ -1,5 +1,10 @@
 from flask import Flask, render_template, request, jsonify
+from flask_caching import Cache
 app = Flask(__name__)
+
+# For this project SimpleCache is fine, but for production I would use FileSystemCache or RedisCache.
+app.config['CACHE_TYPE'] = 'SimpleCache'
+cache = Cache(app)
 
 import json
 import plotly
@@ -12,11 +17,34 @@ from datetime import datetime, timedelta
 from models.black_scholes import price_option
 from models.binomial import binomial_price
 from models.pde import crank_nicolson_call, crank_nicolson_put
+from models.gbm import simulate_gbm
+
+
+@cache.memoize(timeout=3600)  # Cache for 1 hour
+def get_stock_history(ticker_symbol, start_date_str, end_date_str):
+    app.logger.info(f"Fetching stock history for {ticker_symbol} from {start_date_str} to {end_date_str}")
+    ticker = yf.Ticker(ticker_symbol)
+    return ticker.history(start=start_date_str, end=end_date_str, auto_adjust=False)
+
+
+@cache.memoize(timeout=3600)  # Cache for 1 hour
+def get_stock_history_period(ticker_symbol, end_date_str, period_str):
+    app.logger.info(f"Fetching stock history for {ticker_symbol}, end date {end_date_str}, period {period_str}")
+    ticker = yf.Ticker(ticker_symbol)
+    return ticker.history(end=end_date_str, period=period_str, auto_adjust=False)
+
+
+@cache.memoize(timeout=86400)  # Cache for 1 day
+def get_risk_free_rate_history(end_date_str, period_str):
+    app.logger.info(f"Fetching risk-free rate history, end date {end_date_str}, period {period_str}")
+    irx = yf.Ticker("^IRX")
+    return irx.history(end=end_date_str, period=period_str, auto_adjust=False)
 
 
 @app.route("/")
 def home():
     return render_template("index.html")
+
 
 @app.route("/plot", methods=["POST"])
 def route_plot():
@@ -25,21 +53,19 @@ def route_plot():
 
     if model == "black_scholes":
         return jsonify(plot_black_scholes(data))
-    
+
     elif model == "binomial":
         return jsonify(plot_binomial(data))
-        #return jsonify({"error": "Binomial plot not implemented yet."})
-    
+
     elif model == "monte_carlo":
-        # return jsonify(plot_monte_carlo(data))
         return jsonify({"error": "Monte Carlo plot not implemented yet."})
 
     elif model == "pde":
         return jsonify(plot_pde(data))
-        #return jsonify({"error": "PDE plot not implemented yet."})
 
     else:
         return jsonify({"error": f"Unknown model: {model}"}), 400
+
 
 @app.route("/historical_price", methods=["POST"])
 def route_historical_price():
@@ -52,7 +78,6 @@ def route_historical_price():
     model = data.get("model", "black_scholes")
     exercise_style = data.get("exercise_style", "european")
 
-    # Basic Input Validation
     if not all([ticker_str, quote_date_str, expiry_date_str, K]):
         return jsonify({"error": "Missing required historical parameters."}), 400
 
@@ -61,60 +86,53 @@ def route_historical_price():
         expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d')
 
         if expiry_date <= quote_date:
-             return jsonify({"error": "Expiry date must be after quote date."}), 400
+            return jsonify({"error": "Expiry date must be after quote date."}), 400
 
         # --- Fetch Data & Calculate Parameters ---
-        ticker = yf.Ticker(ticker_str)
-
-        # 1. Get Stock Price (S) on quote_date
-        hist_s = ticker.history(start=quote_date, end=quote_date + timedelta(days=1), auto_adjust=False)
+        hist_s = get_stock_history(ticker_str, quote_date.strftime('%Y-%m-%d'), (quote_date + timedelta(days=1)).strftime('%Y-%m-%d'))
         if hist_s.empty or 'Close' not in hist_s.columns:
-             hist_s = ticker.history(end=quote_date + timedelta(days=1), period="5d", auto_adjust=False)
-             if hist_s.empty:
-                 return jsonify({"error": f"Could not fetch stock price for {ticker_str} around {quote_date_str}."}), 400
-             S = hist_s['Close'].iloc[-1]
+            hist_s = get_stock_history_period(ticker_str, (quote_date + timedelta(days=1)).strftime('%Y-%m-%d'), "5d")
+            if hist_s.empty:
+                return jsonify({"error": f"Could not fetch stock price for {ticker_str} around {quote_date_str}."}), 400
+            S = hist_s['Close'].iloc[-1]
         else:
-             S = hist_s['Close'].iloc[0]
+            S = hist_s['Close'].iloc[0]
 
-        # 2. Calculate Volatility (sigma)
         start_vol_date = quote_date - timedelta(days=365)
-        hist_vol = ticker.history(start=start_vol_date - timedelta(days=5), end=quote_date, auto_adjust=False)
+        hist_vol_start_str = (start_vol_date - timedelta(days=5)).strftime('%Y-%m-%d')
+        hist_vol_end_str = quote_date.strftime('%Y-%m-%d')
+        hist_vol = get_stock_history(ticker_str, hist_vol_start_str, hist_vol_end_str)
+
         if len(hist_vol) < 2:
-             return jsonify({"error": f"Not enough historical data for {ticker_str} to calculate volatility before {quote_date_str}."}), 400
+            return jsonify({"error": f"Not enough historical data for {ticker_str} to calculate volatility before {quote_date_str}."}), 400
 
         hist_vol['LogReturn'] = np.log(hist_vol['Close'] / hist_vol['Close'].shift(1))
         daily_std_dev = hist_vol['LogReturn'].std()
         sigma = daily_std_dev * np.sqrt(252)
 
         if np.isnan(sigma) or sigma == 0:
-             return jsonify({"error": f"Could not calculate valid volatility for {ticker_str}."}), 400
+            return jsonify({"error": f"Could not calculate valid volatility for {ticker_str}."}), 400
 
-        # 3. Calculate Time to Maturity (T)
         T = (expiry_date - quote_date).days / 365.0
         if T <= 0:
             return jsonify({"error": "Time to maturity must be positive."}), 400
 
-        # 4. Fetch Risk-Free Rate (r) using 13-Week Treasury Bill (^IRX)
-        r = 0.05 
+        r = 0.05
         try:
-            irx = yf.Ticker("^IRX")
-            # Fetch data around the quote date, look back 5 days
-            hist_r = irx.history(end=quote_date + timedelta(days=1), period="5d", auto_adjust=False)
+            hist_r_end_date_str = (quote_date + timedelta(days=1)).strftime('%Y-%m-%d')
+            hist_r = get_risk_free_rate_history(hist_r_end_date_str, "5d")
             if not hist_r.empty and 'Close' in hist_r.columns:
                 r_percentage = hist_r['Close'].iloc[-1]
-                r = r_percentage / 100.0 # Convert to decimal
+                r = r_percentage / 100.0
             else:
-                 app.logger.warning(f"Could not fetch risk-free rate (^IRX) around {quote_date_str}. Using default 0.")
-                 
+                app.logger.warning(f"Could not fetch risk-free rate (^IRX) around {quote_date_str}. Using default 0.")
         except Exception as r_err:
             app.logger.error(f"Error fetching risk-free rate (^IRX): {r_err}")
-            r = 0.05 
+            r = 0.05
             app.logger.warning(f"Using fallback risk-free rate: {r}")
 
         american = (exercise_style == 'american')
 
-
-        # PLOTTING LOGIC
         plot_data = {
             "S": S,
             "K": K,
@@ -125,7 +143,6 @@ def route_historical_price():
             "exercise_style": exercise_style
         }
 
-        # --- Call Pricing Model & Generate Plot ---
         price = None
         plot_json = None
         plot_result = {}
@@ -143,7 +160,7 @@ def route_historical_price():
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
         elif model == "monte_carlo":
-             return jsonify({"error": "Monte Carlo model is not implemented for historical pricing yet."}), 400
+            return jsonify({"error": "Monte Carlo model is not implemented for historical pricing yet."}), 400
         elif model == "pde":
             if american:
                 app.logger.warning("PDE model requested with American style, forcing European.")
@@ -156,7 +173,7 @@ def route_historical_price():
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
         else:
-             return jsonify({"error": f"Model '{model}' not supported for historical pricing/plotting yet."}), 400
+            return jsonify({"error": f"Model '{model}' not supported for historical pricing/plotting yet."}), 400
 
         return jsonify({
             "S": S,
@@ -168,11 +185,12 @@ def route_historical_price():
         })
 
     except ValueError as ve:
-         app.logger.error(f"Date parsing error: {ve}")
-         return jsonify({"error": "Invalid date format. Please use YYYY-MM-DD."}), 400
+        app.logger.error(f"Date parsing error: {ve}")
+        return jsonify({"error": "Invalid date format. Please use YYYY-MM-DD."}), 400
     except Exception as e:
         app.logger.error(f"Error in /historical_price: {e}")
         return jsonify({"error": f"An error occurred processing the historical data: {str(e)}"}), 500
+
 
 def plot_black_scholes(data):
     K = float(data["K"])
@@ -235,6 +253,7 @@ def plot_binomial(data):
         "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
         "price": user_price
     }
+
 
 def plot_pde(data):
     S_user = data["S"]
