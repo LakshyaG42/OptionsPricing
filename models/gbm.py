@@ -11,7 +11,7 @@ def simulate_gbm_paths(S0, T, r, sigma, steps, num_paths):
         price_paths[t_idx] = price_paths[t_idx-1] * np.exp((r - 0.5 * sigma**2)*dt + sigma * np.sqrt(dt) * Z)
 
     return time_array, price_paths
-# NEW STUFF:
+
 def calculate_payoffs(terminal_prices, K, option_type):
     if option_type.lower() == 'call':
         payoffs = np.maximum(terminal_prices - K, 0)
@@ -61,8 +61,7 @@ def get_gbm_analytics(terminal_prices, payoffs, K, T, r, option_type, option_cos
         "probability_option_expires_itm": f"{prob_itm:.2%}"
     }
     
-    # P&L Histogram Data (frequencies and bin edges)
-    # np.histogram returns (counts, bin_edges)
-    pnl_counts, pnl_bin_edges = np.histogram(pnl_values, bins=20)
+    # Terminal Prices Histogram Data
+    terminal_prices_counts, terminal_prices_bin_edges = np.histogram(terminal_prices, bins=30) # Increased bins for more detail
     
-    return stats, pnl_counts.tolist(), pnl_bin_edges.tolist()
+    return stats, terminal_prices_counts.tolist(), terminal_prices_bin_edges.tolist()

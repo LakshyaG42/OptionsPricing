@@ -14,7 +14,7 @@
           <input type="radio" name="mode" value="manual" checked> Manual Input
       </label>
       <label>
-          <input type="radio" name="mode" value="historical"> Historical Data
+          <input type="radio" name="mode" value="historical"> Real World Data
       </label>
   </div>
 
@@ -37,6 +37,9 @@
             <label>Volatility (σ):</label>
             <input type="number" id="sigma" value="0.2" step="0.01" required><br>
 
+            <label>Market Price (Optional, for error analysis):</label>
+            <input type="number" id="market_price" placeholder="e.g., 2.18" step="any"><br>
+
             <label>Option Type:</label>
             <select id="option_type_manual">
             <option value="call">Call</option>
@@ -49,6 +52,7 @@
             <option value="binomial">Binomial</option>
             <option value="monte_carlo">Monte Carlo</option>
             <option value="pde">PDE (Crank-Nicolson)</option>
+            <option value="all">All Models</option>
             </select><br><br>
 
             <!-- Extra Inputs (Hidden by default) -->
@@ -117,7 +121,7 @@
                 <option value="american">American</option>
             </select><br>
 
-            <button type="submit">Get Historical Price</button>
+            <button type="submit">Get Real Price</button>
         </form>
 
         <!-- Display Calculated Historical Parameters -->
@@ -131,13 +135,29 @@
     </div>
 
     <div class="plot-container">
-        <div id="plot"></div>
-        <p id="output"></p>
-        <button id="rerunButton" style="display: none;">Rerun Simulations</button>
-        <div id="gbm_plot_div"></div> 
-        <div id="pnl_histogram_div"></div> <!-- Added P&L Histogram Div -->
-        <div id="gbm_analytics_summary_div" class="analytics-summary"></div> <!-- Added Analytics Summary Div -->
-    </div>
+        <!-- Primary display area: Main model plot OR "All Models" summary plot -->
+        <div id="primary-plot-area">
+            <div id="plot"></div> <!-- BS, Binomial, PDE plot, OR "All Models" price bar chart -->
+            <p id="output"></p>
+            <button id="rerunButton" style="display: none;">Rerun Simulations</button>
+        </div>
+
+        <!-- Secondary display area for "All Models" details (table, error chart) -->
+        <div id="all-models-details-area" class="results-section" style="display: none;">
+            <h4>Detailed Model Comparison</h4>
+            <div id="pricing_table_div"></div>
+            <div id="error_bar_chart_div"></div>
+        </div>
+
+        <!-- Secondary display area for individual model analytics (GBM, P&L, Summary) -->
+        <div id="analytics-area" class="results-section" style="display: none;">
+            <h4>Simulation Analytics</h4>
+            <div class="analytics-grid">
+                <div id="gbm_plot_div" class="analytics-grid-item"></div>
+                <div id="terminal_prices_histogram_div" class="analytics-grid-item"></div>
+            </div>
+            <div id="gbm_analytics_summary_div" class="analytics-summary"></div>
+        </div>
     </div>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

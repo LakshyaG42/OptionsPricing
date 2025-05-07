@@ -153,6 +153,97 @@ h2 {
     background-color: #0056b3;
 }
 
+/* New styles for plot organization */
+#primary-plot-area {
+    width: 100%;
+    margin-bottom: 20px; /* Space before secondary areas */
+}
+
+.results-section { /* Common styling for all-models-details and analytics-area */
+    width: 100%;
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    box-sizing: border-box;
+}
+.results-section h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #333;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+    font-size: 1.2em;
+}
+
+.analytics-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px; /* Space between grid items */
+    margin-bottom: 15px; /* Space before summary */
+}
+
+.analytics-grid-item {
+    flex: 1 1 calc(50% - 10px); /* Try to fit two items per row, accounts for gap */
+    min-width: 280px; /* Minimum width before wrapping */
+    height: 260px; /* ADJUSTED: Set a fixed height for consistent plot container size */
+    box-sizing: border-box;
+    overflow: hidden; /* ADDED: Clip content that extends beyond the container bounds */
+    /* Optional: add border/background if desired for individual plot boxes */
+    /* background-color: #fff; */
+    /* border: 1px solid #e0e0e0; */
+    /* border-radius: 4px; */
+    /* padding: 10px; */
+}
+/* Ensure plotly plots fill their containers */
+.analytics-grid-item .js-plotly-plot,
+.analytics-grid-item > div > .js-plotly-plot { /* For cases where plotly nests an extra div */
+    width: 100% !important;
+    height: 100% !important;
+}
+#gbm_plot_div, #terminal_prices_histogram_div { /* Ensure direct divs also behave */
+     display: flex; /* Helps if plotly adds an internal div */
+     flex-direction: column;
+}
+
+
+#gbm_analytics_summary_div {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e9ecef; /* Match other light gray sections */
+    border-radius: 4px;
+}
+#gbm_analytics_summary_div h4 {
+    border-bottom: none; /* Remove double border if h4 is already styled by .results-section */
+    padding-bottom: 0;
+    margin-bottom: 10px;
+}
+
+
+#pricing_table_div, #error_bar_chart_div {
+    margin-bottom: 15px;
+}
+#error_bar_chart_div .js-plotly-plot {
+     width: 100% !important;
+     min-height: 300px; /* Give error bar chart some default height */
+}
+
+#pricing_table_div table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+#pricing_table_div th, #pricing_table_div td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+#pricing_table_div th {
+    background-color: #e9ecef;
+    font-weight: bold;
+}
+
 .mode-toggle {
     text-align: center;
     margin-bottom: 25px;
@@ -229,16 +320,4 @@ h2 {
 
 .analytics-summary strong {
     color: #0056b3;
-}
-
-#pnl_histogram_div {
-    width: 100%;
-    min-height: 350px; /* Ensure it has some height */
-    margin-top: 15px;
-}
-
-#gbm_plot_div {
-    width: 100%;
-    min-height: 350px; /* Ensure it has some height */
-    margin-top: 15px;
 }

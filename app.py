@@ -63,9 +63,40 @@ def plot_pnl_histogram(pnl_counts, pnl_bin_edges, model_name):
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
 
+def plot_terminal_prices_histogram(terminal_prices_counts, terminal_prices_bin_edges, K_strike):
+    """Generates a Plotly JSON for the terminal stock prices histogram."""
+    fig = go.Figure(data=[go.Bar(
+        x=[(terminal_prices_bin_edges[i] + terminal_prices_bin_edges[i+1])/2 for i in range(len(terminal_prices_counts))],  # Bin centers
+        y=terminal_prices_counts,
+        marker_color='#2ca02c' # Green color for stock prices
+    )])
+    fig.add_vline(x=K_strike, line_width=2, line_dash="dash", line_color="red", name="Strike Price")
+    fig.update_layout(
+        title=f"Distribution of Terminal Stock Prices (S<sub>T</sub>)",
+        xaxis_title="Terminal Stock Price (S<sub>T</sub>) ($)",
+        yaxis_title="Frequency (Number of Simulations)",
+        bargap=0.1,
+        template='plotly_white',
+        shapes=[dict(
+            type='line',
+            yref='paper', y0=0, y1=1,
+            xref='x', x0=K_strike, x1=K_strike,
+            line=dict(color='red', width=2, dash='dash')
+        )],
+        annotations=[dict(
+            x=K_strike, y=max(terminal_prices_counts) * 0.95 if terminal_prices_counts else 0, # Position annotation near strike
+            xref='x', yref='y',
+            text=f'Strike K={K_strike:.2f}', showarrow=True, arrowhead=1, ax=20, ay=-30
+        )],
+        margin=dict(l=40, r=20, t=40, b=30), # Adjust margins
+        autosize=True # Ensure autosize
+    )
+    return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
+
+
 def generate_full_analytics_package(data, model_price, model_name_str, num_paths_sim=1000, num_steps_sim=100):
     """
-    Helper to generate GBM simulation, its plot, MC price, P&L histogram, and stats.
+    Helper to generate GBM simulation, its plot, MC price, Terminal Prices histogram, and stats.
     model_price is the price from the primary model (BS, Binomial, PDE).
     """
     S_user = data["S"]
@@ -86,23 +117,111 @@ def generate_full_analytics_package(data, model_price, model_name_str, num_paths
     # 3. Monte Carlo Price from these simulations
     mc_price_sim = np.mean(np.exp(-r * T) * payoffs_analytics)
 
-    # 4. P&L analysis and Summary Stats
+    # 4. P&L analysis and Summary Stats (and Terminal Price histogram data)
     # Use the primary model's price as the option_cost for P&L
-    summary_stats, pnl_counts, pnl_bin_edges = get_gbm_analytics(
+    summary_stats, terminal_prices_counts, terminal_prices_bin_edges = get_gbm_analytics(
         terminal_prices_analytics, 
         payoffs_analytics, 
         K, T, r, option_type, 
         option_cost=model_price 
     )
     
-    # 5. P&L Histogram Plot
-    pnl_histogram_plot_json = plot_pnl_histogram(pnl_counts, pnl_bin_edges, model_name_str)
+    # 5. Terminal Prices Histogram Plot
+    terminal_prices_histogram_plot_json = plot_terminal_prices_histogram(terminal_prices_counts, terminal_prices_bin_edges, K)
 
     return {
         "gbm_simulation_plot": gbm_simulation_plot_json,
         "monte_carlo_price_from_analytics_sim": mc_price_sim,
         "gbm_summary_stats": summary_stats,
-        "pnl_histogram_plot": pnl_histogram_plot_json
+        "terminal_prices_histogram_plot": terminal_prices_histogram_plot_json
+    }
+
+
+def plot_all_models_data(data, market_price_from_payload):
+    """
+    Generates a combined plot, pricing table, and error bar chart for all models.
+    """
+    S_user = data["S"]
+    K = float(data["K"])
+    T = data["T"]
+    r = data["r"]
+    sigma = data["sigma"]
+    option_type = data["option_type"]
+    exercise_style = data.get("exercise_style", "european")
+    american = (exercise_style == 'american')
+
+    # Parameters for models that need them (e.g., Binomial, MC)
+    n_steps = data.get("n_steps", 100)  # Default if not provided
+    n_simulations = data.get("n_simulations", 10000) # Default for MC
+
+    # Calculate prices for all models
+    bs_price = price_option(S_user, K, T, r, sigma, option_type)
+    print("Black-Scholes price:", bs_price)
+    binomial_price_val = binomial_price(S_user, K, T, r, sigma, n_steps=n_steps, option_type=option_type, american=american)
+    print("Binomial price:", binomial_price_val)
+    # Monte Carlo Simulation
+    mc_time_array, mc_price_paths = simulate_gbm_paths(S_user, T, r, sigma, n_steps, n_simulations) # n_steps for MC time steps
+    mc_terminal_prices = mc_price_paths[-1, :]
+    mc_payoffs = calculate_payoffs(mc_terminal_prices, K, option_type)
+    mc_discounted_payoffs = np.exp(-r * T) * mc_payoffs
+    mc_price = np.mean(mc_discounted_payoffs)
+    mc_error = np.std(mc_discounted_payoffs) / np.sqrt(n_simulations)
+    print("Finished MC simulation. Price:", mc_price, "Error:", mc_error)
+
+    # PDE Price (Crank-Nicolson) - Assuming European for simplicity in "All Models" view
+    # PDE model here doesn't easily take 'american' for calls.
+    # Using default x_max and N_t for PDE in this combined view.
+    x_max_pde = data.get("x_max", 200 if option_type == 'call' else S_user * 2) # Sensible defaults
+    n_t_pde = data.get("n_t", 1000)
+    if option_type == "call":
+        _, _, pde_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max_pde, N_t=n_t_pde)
+    else: # put
+        _, _, pde_price = crank_nicolson_put(S_user, K, sigma, T, x_max=x_max_pde, N_t=n_t_pde)
+    print("PDE price:", pde_price)
+
+    # Generate bar chart for model prices
+    model_names = ["Black-Scholes", "Binomial", "Monte Carlo", "PDE"]
+    model_prices = [bs_price, binomial_price_val, mc_price, pde_price]
+
+    fig_bar_prices = go.Figure(data=[go.Bar(
+        x=model_names,
+        y=model_prices,
+        text=[f"${p:.2f}" for p in model_prices],
+        textposition='auto',
+        marker_color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'] # Colors for bars
+    )])
+    fig_bar_prices.update_layout(
+        title="Option Prices by Model",
+        xaxis_title="Model",
+        yaxis_title="Option Price ($)"
+    )
+    combined_plot_json = json.dumps(fig_bar_prices, cls=plotly.utils.PlotlyJSONEncoder)
+
+    # Generate pricing table data
+    pricing_table = [
+        {"Model": "Black-Scholes", "Price": f"${bs_price:.2f}"},
+        {"Model": "Binomial", "Price": f"${binomial_price_val:.2f}"},
+        {"Model": "Monte Carlo", "Price": f"${mc_price:.2f} ± {mc_error:.2f}"},
+        {"Model": "PDE", "Price": f"${pde_price:.2f}"},
+    ]
+    if market_price_from_payload is not None:
+        pricing_table.append({"Model": "Market Price", "Price": f"${market_price_from_payload:.2f}"})
+
+    # Generate pricing error bar chart (only if market_price was provided)
+    error_bar_chart_json = None
+    if market_price_from_payload is not None:
+        models_for_error = ["Black-Scholes", "Binomial", "Monte Carlo", "PDE"]
+        prices_for_error = [bs_price, binomial_price_val, mc_price, pde_price]
+        errors = [abs(p - market_price_from_payload) for p in prices_for_error]
+        
+        fig_error = go.Figure(data=[go.Bar(x=models_for_error, y=errors, name='Absolute Error')])
+        fig_error.update_layout(title="Absolute Pricing Error vs Market Price", xaxis_title="Model", yaxis_title="Absolute Error ($)")
+        error_bar_chart_json = json.dumps(fig_error, cls=plotly.utils.PlotlyJSONEncoder)
+    print("Pricing table:", pricing_table)
+    return {
+        "combined_plot": combined_plot_json,
+        "pricing_table": pricing_table,
+        "error_bar_chart": error_bar_chart_json
     }
 
 
@@ -110,12 +229,18 @@ def generate_full_analytics_package(data, model_price, model_name_str, num_paths
 def route_plot():
     data = request.json
     model = data.get("model", "black_scholes")
+    market_price = data.get("market_price") # This will be a float or None (if JS sent null)
+    
     if "K" in data:
         data["K"] = float(data["K"])
     
     # Default values for analytics simulations
     num_paths_analytics = data.get("n_simulations", 1000)  # Use n_simulations if provided, else 1000
     num_steps_analytics = data.get("n_steps", 100)  # Use n_steps if provided, else 100
+
+    if model == "all":
+        result = plot_all_models_data(data, market_price) # Pass market_price here
+        return jsonify(result)
 
     if model == "black_scholes":
         result = plot_black_scholes(data)
@@ -132,13 +257,23 @@ def route_plot():
     elif model == "monte_carlo":
         bs_ref_price = price_option(data["S"], float(data["K"]), data["T"], data["r"], data["sigma"], data["option_type"])
         analytics_package = generate_full_analytics_package(data, bs_ref_price, "Monte Carlo (GBM Analytics)", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
+        
+        mc_price_from_sim = analytics_package.get("monte_carlo_price_from_analytics_sim")
+        if isinstance(mc_price_from_sim, str) and mc_price_from_sim.startswith("$"):
+            try:
+                mc_price_value = float(mc_price_from_sim.replace("$",""))
+            except ValueError:
+                mc_price_value = None
+        else:
+            mc_price_value = mc_price_from_sim
+
         return jsonify({
-            "error": "Primary Monte Carlo model not fully implemented. Displaying GBM analytics based on BS reference price.",
-            "price": analytics_package["monte_carlo_price_from_analytics_sim"],
+            "price": mc_price_value,
             "plot": None,
             "gbm_simulation_plot": analytics_package["gbm_simulation_plot"],
             "gbm_summary_stats": analytics_package["gbm_summary_stats"],
-            "pnl_histogram_plot": analytics_package["pnl_histogram_plot"]
+            "terminal_prices_histogram_plot": analytics_package["terminal_prices_histogram_plot"],
+            "monte_carlo_price_from_analytics_sim": mc_price_value
         })
 
     elif model == "pde":
@@ -252,10 +387,18 @@ def route_historical_price():
         elif model == "monte_carlo":
             bs_ref_price = price_option(S, K, T, r, sigma, option_type)
             analytics_package = generate_full_analytics_package(plot_data, bs_ref_price, "Monte Carlo (GBM Analytics)", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
-            price = analytics_package["monte_carlo_price_from_analytics_sim"]
+            
+            mc_price_from_sim_hist = analytics_package.get("monte_carlo_price_from_analytics_sim")
+            if isinstance(mc_price_from_sim_hist, str) and mc_price_from_sim_hist.startswith("$"):
+                try:
+                    price = float(mc_price_from_sim_hist.replace("$",""))
+                except ValueError:
+                    price = None 
+            else:
+                price = mc_price_from_sim_hist
+
             plot_json = None
             plot_result = {"price": price, "plot": plot_json}
-            plot_result.update(analytics_package)
         elif model == "pde":
             if american:
                 app.logger.warning("PDE model requested with American style, forcing European.")
@@ -344,7 +487,9 @@ def plot_gbm_simulation(S0, K_strike, T, r, sigma, steps=100, num_paths=100):
     )
     fig.update_layout(title=f"GBM Stock Price Simulations (K={K_strike:.2f})",
                       xaxis_title='Time (Years)',
-                      yaxis_title='Stock Price')
+                      yaxis_title='Stock Price',
+                      margin=dict(l=40, r=20, t=40, b=30), # Adjust margins
+                      autosize=True) # Ensure autosize
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
 
@@ -416,5 +561,6 @@ def plot_pde(data):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
