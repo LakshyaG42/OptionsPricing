@@ -40,6 +40,13 @@ const modelParamMap = {
         historicalForm.style.display = 'none';
         mainContainer.classList.add('manual-active');
         clearHistoricalResults();
+        // Clear historical plots when switching to manual
+        Plotly.purge("plot");
+        Plotly.purge("gbm_plot_div"); // Clear GBM plot
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
+        document.getElementById("output").innerText = "";
+        mainContainer.classList.remove("plot-active");
         updateHistoricalVisibleInputs(); 
     } else { 
       // historical mode
@@ -50,6 +57,9 @@ const modelParamMap = {
 
         // Clear manual plot/results if switching away
         Plotly.purge("plot");
+        Plotly.purge("gbm_plot_div"); // Clear GBM plot
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
         document.getElementById("output").innerText = "";
         mainContainer.classList.remove("plot-active"); 
         rerunButton.style.display = 'none';
@@ -180,6 +190,9 @@ function updateHistoricalVisibleInputs() {
     try {
         document.getElementById("output").innerText = "Calculating...";
         Plotly.purge("plot");
+        Plotly.purge("gbm_plot_div"); // Clear previous GBM plot
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
         rerunButton.style.display = "none";
         mainContainer.classList.remove("plot-active");
 
@@ -194,6 +207,9 @@ function updateHistoricalVisibleInputs() {
             document.getElementById("output").innerText = `Error: ${result.error}`;
             lastSuccessfulPayload = null;
             Plotly.purge("plot");
+            Plotly.purge("gbm_plot_div"); // Clear GBM plot on error
+            Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+            document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
             rerunButton.style.display = "none";
             mainContainer.classList.remove("plot-active");
             return;
@@ -201,20 +217,69 @@ function updateHistoricalVisibleInputs() {
 
         // Plotting logic (assuming /plot returns plot JSON)
         if (result.plot) {
-            const plot = JSON.parse(result.plot);
-            Plotly.newPlot("plot", plot.data, plot.layout);
-            mainContainer.classList.add("plot-active");
+            try {
+                const plot = JSON.parse(result.plot);
+                Plotly.newPlot("plot", plot.data, plot.layout);
+                mainContainer.classList.add("plot-active");
+            } catch (e) {
+                console.error("Error rendering main plot:", e);
+                Plotly.purge("plot");
+                mainContainer.classList.remove("plot-active");
+            }
         } else {
              Plotly.purge("plot");
              mainContainer.classList.remove("plot-active");
         }
 
-        // Display price
-        if (result.price !== undefined) {
-            document.getElementById("output").innerText = `Price: $${result.price.toFixed(4)}`;
+        // Render GBM simulation plot if available (renamed from gbm_plot to gbm_simulation_plot in backend)
+        if (result.gbm_simulation_plot) {
+            try {
+                const gbmSimPlot = JSON.parse(result.gbm_simulation_plot);
+                Plotly.newPlot("gbm_plot_div", gbmSimPlot.data, gbmSimPlot.layout);
+            } catch (e) {
+                console.error("Error rendering GBM simulation plot:", e);
+                Plotly.purge("gbm_plot_div");
+            }
         } else {
-            document.getElementById("output").innerText = result.plot ? "Plot generated." : "No price returned.";
+            Plotly.purge("gbm_plot_div");
         }
+
+        // Render P&L Histogram if available
+        if (result.pnl_histogram_plot) {
+            try {
+                const pnlPlot = JSON.parse(result.pnl_histogram_plot);
+                Plotly.newPlot("pnl_histogram_div", pnlPlot.data, pnlPlot.layout);
+            } catch (e) {
+                console.error("Error rendering P&L histogram:", e);
+                Plotly.purge("pnl_histogram_div");
+            }
+        } else {
+            Plotly.purge("pnl_histogram_div");
+        }
+        
+        // Display Summary Statistics
+        const summaryDiv = document.getElementById("gbm_analytics_summary_div");
+        summaryDiv.innerHTML = ""; // Clear previous
+        if (result.gbm_summary_stats) {
+            let summaryHTML = "<h4>GBM Simulation Analytics</h4>";
+            for (const [key, value] of Object.entries(result.gbm_summary_stats)) {
+                const readableKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                summaryHTML += `<p><strong>${readableKey}:</strong> ${value}</p>`;
+            }
+            summaryDiv.innerHTML = summaryHTML;
+        }
+
+        // Display price (primary model price)
+        let priceText = "";
+        if (result.price !== undefined && result.price !== null) {
+            priceText = `Model Price: $${result.price.toFixed(4)}`;
+        }
+        // Display Monte Carlo price from analytics simulation
+        if (result.monte_carlo_price_from_analytics_sim !== undefined && result.monte_carlo_price_from_analytics_sim !== null) {
+            if (priceText) priceText += " | ";
+            priceText += `MC (Sim) Price: $${result.monte_carlo_price_from_analytics_sim.toFixed(4)}`;
+        }
+        document.getElementById("output").innerText = priceText || (result.plot ? "Plot generated." : "No price returned.");
 
         lastSuccessfulPayload = payload;
         // Show rerun button only for Monte Carlo model
@@ -225,8 +290,12 @@ function updateHistoricalVisibleInputs() {
         }
 
     } catch (err) {
-        document.getElementById("output").innerText = "Failed to fetch plot.";
+        document.getElementById("output").innerText = "Failed to fetch data.";
         lastSuccessfulPayload = null;
+        Plotly.purge("plot"); // Clear main plot on error
+        Plotly.purge("gbm_plot_div"); // Clear GBM plot on error
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
         rerunButton.style.display = "none";
         mainContainer.classList.remove("plot-active");
         console.error(err);
@@ -268,6 +337,9 @@ async function handleHistoricalFormSubmit() {
         document.getElementById("output").innerText = "Fetching historical data and calculating...";
         clearHistoricalResults(); // Clear previous calculated params
         Plotly.purge("plot"); // Clear plot area initially
+        Plotly.purge("gbm_plot_div"); // Clear previous GBM plot
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
         mainContainer.classList.remove("plot-active"); // Remove manual plot class
 
         const res = await fetch("/historical_price", { // Send to NEW endpoint
@@ -281,6 +353,9 @@ async function handleHistoricalFormSubmit() {
             document.getElementById("output").innerText = `Error: ${result.error}`;
             lastSuccessfulHistoricalPayload = null;
             Plotly.purge("plot"); // Ensure plot is cleared on error
+            Plotly.purge("gbm_plot_div"); // Clear GBM plot on error
+            Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+            document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
             mainContainer.classList.remove("plot-active");
             return;
         }
@@ -294,7 +369,7 @@ async function handleHistoricalFormSubmit() {
         // Display price
         document.getElementById("output").innerText = `Historical Price: $${result.price?.toFixed(4) ?? 'N/A'}`;
 
-        // Plotting logic for historical data
+        // Plotting logic for historical data (main model plot)
         if (result.plot) {
             try {
                 const plot = JSON.parse(result.plot);
@@ -310,13 +385,66 @@ async function handleHistoricalFormSubmit() {
              mainContainer.classList.remove("plot-active");
         }
 
+        // Render GBM simulation plot if available
+        if (result.gbm_simulation_plot) { // Check for the new key
+            try {
+                const gbmSimPlot = JSON.parse(result.gbm_simulation_plot);
+                Plotly.newPlot("gbm_plot_div", gbmSimPlot.data, gbmSimPlot.layout);
+            } catch (e) {
+                console.error("Error rendering GBM simulation plot (historical):", e);
+                Plotly.purge("gbm_plot_div");
+            }
+        } else {
+            Plotly.purge("gbm_plot_div");
+        }
+        
+        // Render P&L Histogram if available
+        if (result.pnl_histogram_plot) {
+            try {
+                const pnlPlot = JSON.parse(result.pnl_histogram_plot);
+                Plotly.newPlot("pnl_histogram_div", pnlPlot.data, pnlPlot.layout);
+            } catch (e) {
+                console.error("Error rendering P&L histogram (historical):", e);
+                Plotly.purge("pnl_histogram_div");
+            }
+        } else {
+            Plotly.purge("pnl_histogram_div");
+        }
+
+        // Display Summary Statistics
+        const summaryDiv = document.getElementById("gbm_analytics_summary_div");
+        summaryDiv.innerHTML = ""; // Clear previous
+        if (result.gbm_summary_stats) {
+            let summaryHTML = "<h4>GBM Simulation Analytics</h4>";
+            for (const [key, value] of Object.entries(result.gbm_summary_stats)) {
+                const readableKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); // Make key readable
+                summaryHTML += `<p><strong>${readableKey}:</strong> ${value}</p>`;
+            }
+            summaryDiv.innerHTML = summaryHTML;
+        }
+        
+        // Display price (primary model price) & MC Price
+        let priceTextHist = "";
+        if (result.price !== undefined && result.price !== null) {
+            priceTextHist = `Model Price: $${result.price.toFixed(4)}`;
+        }
+         // Display Monte Carlo price from analytics simulation
+        if (result.monte_carlo_price_from_analytics_sim !== undefined && result.monte_carlo_price_from_analytics_sim !== null) {
+            if (priceTextHist) priceTextHist += " | ";
+            priceTextHist += `MC (Sim) Price: $${result.monte_carlo_price_from_analytics_sim.toFixed(4)}`;
+        }
+        document.getElementById("output").innerText = priceTextHist || "Analytics generated.";
+
 
         lastSuccessfulHistoricalPayload = payload; // Cache successful historical payload
 
     } catch (err) {
-        document.getElementById("output").innerText = "Failed to fetch historical price.";
+        document.getElementById("output").innerText = "Failed to fetch historical price or analytics.";
         lastSuccessfulHistoricalPayload = null;
         Plotly.purge("plot"); // Ensure plot is cleared on fetch error
+        Plotly.purge("gbm_plot_div"); // Clear GBM plot on fetch error
+        Plotly.purge("pnl_histogram_div"); // Clear P&L histogram
+        document.getElementById("gbm_analytics_summary_div").innerHTML = ""; // Clear summary
         mainContainer.classList.remove("plot-active");
         console.error(err);
     }
