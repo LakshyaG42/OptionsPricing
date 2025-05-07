@@ -1,6 +1,7 @@
 import numpy as np
-from typing import Union, Optional, Tuple
 from scipy.stats import norm
+import yfinance as yf
+from datetime import datetime, timedelta
 
 class MonteCarloOptionPricer:
     def __init__(self, 
@@ -36,6 +37,72 @@ class MonteCarloOptionPricer:
         
         if self.option_type not in ['call', 'put']:
             raise ValueError("option_type must be either 'call' or 'put'")
+
+    @classmethod
+    def from_ticker(cls, 
+                   ticker: str,
+                   strike_price: float,
+                   quote_date: datetime,
+                   expiry_date: datetime,
+                   option_type: str = 'call',
+                   num_simulations: int = 10000,
+                   num_steps: int = 100) -> 'MonteCarloOptionPricer':
+        """
+        Create a MonteCarloOptionPricer instance from historical ticker data.
+        
+        Args:
+            ticker (str): Stock ticker symbol
+            strike_price (float): Strike price of the option
+            quote_date (datetime): Date of the option quote
+            expiry_date (datetime): Option expiration date
+            option_type (str): 'call' or 'put'
+            num_simulations (int): Number of Monte Carlo simulations
+            num_steps (int): Number of time steps in the simulation
+            
+        Returns:
+            MonteCarloOptionPricer: Configured pricer instance
+        """
+        # Get stock data
+        ticker_data = yf.Ticker(ticker)
+        hist = ticker_data.history(start=quote_date, end=quote_date + timedelta(days=1))
+        if hist.empty:
+            hist = ticker_data.history(end=quote_date + timedelta(days=1), period="5d")
+        if hist.empty:
+            raise ValueError(f"Could not fetch stock price for {ticker} around {quote_date}")
+        spot_price = hist['Close'].iloc[-1]
+
+        # Calculate volatility from historical data
+        vol_start = quote_date - timedelta(days=365)
+        vol_hist = ticker_data.history(start=vol_start, end=quote_date)
+        if len(vol_hist) < 2:
+            raise ValueError(f"Not enough historical data for {ticker} to calculate volatility")
+        returns = np.log(vol_hist['Close'] / vol_hist['Close'].shift(1))
+        volatility = returns.std() * np.sqrt(252)
+
+        # Get risk-free rate
+        try:
+            irx = yf.Ticker("^IRX")
+            r_hist = irx.history(end=quote_date + timedelta(days=1), period="5d")
+            if not r_hist.empty:
+                risk_free_rate = r_hist['Close'].iloc[-1] / 100.0
+            else:
+                risk_free_rate = 0.05  # Default to 5% if can't fetch rate
+        except:
+            risk_free_rate = 0.05  # Default to 5% if can't fetch rate
+
+        # Calculate time to maturity
+        time_to_maturity = (expiry_date - quote_date).days / 365.0
+
+        return cls(
+            spot_price=spot_price,
+            strike_price=strike_price,
+            time_to_maturity=time_to_maturity,
+            risk_free_rate=risk_free_rate,
+            volatility=volatility,
+            option_type=option_type,
+            num_simulations=num_simulations,
+            num_steps=num_steps
+        )
 
     def _generate_paths(self) -> np.ndarray:
         """
@@ -77,12 +144,12 @@ class MonteCarloOptionPricer:
             
         return payoffs
 
-    def price_european_option(self) -> Tuple[float, float]:
+    def price_european_option(self) -> tuple[float, float]:
         """
         Price a European option using Monte Carlo simulation.
         
         Returns:
-            Tuple[float, float]: (option_price, standard_error)
+            tuple[float, float]: (option_price, standard_error)
         """
         # Generate price paths
         price_paths = self._generate_paths()
@@ -100,12 +167,12 @@ class MonteCarloOptionPricer:
         
         return option_price, standard_error
 
-    def price_american_option(self) -> Tuple[float, float]:
+    def price_american_option(self) -> tuple[float, float]:
         """
         Price an American option using Monte Carlo simulation with Longstaff-Schwartz method.
         
         Returns:
-            Tuple[float, float]: (option_price, standard_error)
+            tuple[float, float]: (option_price, standard_error)
         """
         # Generate price paths
         price_paths = self._generate_paths()

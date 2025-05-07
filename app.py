@@ -17,8 +17,8 @@ from datetime import datetime, timedelta
 from models.black_scholes import price_option
 from models.binomial import binomial_price
 from models.pde import crank_nicolson_call, crank_nicolson_put
-from models.gbm import simulate_gbm
-
+#from models.gbm import simulate_gbm
+from models.monte_carlo import MonteCarloOptionPricer
 
 @cache.memoize(timeout=3600)  # Cache for 1 hour
 def get_stock_history(ticker_symbol, start_date_str, end_date_str):
@@ -58,7 +58,7 @@ def route_plot():
         return jsonify(plot_binomial(data))
 
     elif model == "monte_carlo":
-        return jsonify({"error": "Monte Carlo plot not implemented yet."})
+        return jsonify(plot_monte_carlo(data))
 
     elif model == "pde":
         return jsonify(plot_pde(data))
@@ -160,7 +160,13 @@ def route_historical_price():
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
         elif model == "monte_carlo":
-            return jsonify({"error": "Monte Carlo model is not implemented for historical pricing yet."}), 400
+            n_simulations = data.get("n_simulations", 10000)
+            n_steps = data.get("n_steps", 100)
+            plot_data["n_simulations"] = n_simulations
+            plot_data["n_steps"] = n_steps
+            plot_result = plot_monte_carlo(plot_data)
+            price = plot_result.get("price")
+            plot_json = plot_result.get("plot")
         elif model == "pde":
             if american:
                 app.logger.warning("PDE model requested with American style, forcing European.")
@@ -277,6 +283,72 @@ def plot_pde(data):
     fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
                              mode='markers', marker=dict(color='red', size=10), name='Current S'))
     fig.update_layout(title='Crank–Nicolson Option Price',
+                      xaxis_title='Stock Price (S)',
+                      yaxis_title='Option Price')
+
+    return {
+        "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
+        "price": user_price
+    }
+
+
+def plot_monte_carlo(data):
+    S_user = data["S"]
+    K = float(data["K"])
+    T = data["T"]
+    r = data["r"]
+    sigma = data["sigma"]
+    option_type = data.get("option_type", "call")
+    exercise_style = data.get("exercise_style", "european")
+    n_simulations = data.get("n_simulations", 10000)
+    n_steps = data.get("n_steps", 100)
+
+    s_min = max(5, int(S_user * 0.5))
+    s_max = int(S_user * 1.5)
+    step = max(1, int((s_max - s_min) / 20))
+    S_range = list(range(s_min, s_max + step, step))
+
+    prices = []
+    for S_val in S_range:
+        pricer = MonteCarloOptionPricer(
+            spot_price=S_val,
+            strike_price=K,
+            time_to_maturity=T,
+            risk_free_rate=r,
+            volatility=sigma,
+            option_type=option_type,
+            num_simulations=n_simulations,
+            num_steps=n_steps
+        )
+        
+        if exercise_style == 'american':
+            price, _ = pricer.price_american_option()
+        else:
+            price, _ = pricer.price_european_option()
+        prices.append(price)
+
+    # Calculate price for user's spot price
+    user_pricer = MonteCarloOptionPricer(
+        spot_price=S_user,
+        strike_price=K,
+        time_to_maturity=T,
+        risk_free_rate=r,
+        volatility=sigma,
+        option_type=option_type,
+        num_simulations=n_simulations,
+        num_steps=n_steps
+    )
+    
+    if exercise_style == 'american':
+        user_price, _ = user_pricer.price_american_option()
+    else:
+        user_price, _ = user_pricer.price_european_option()
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=S_range, y=prices, mode='lines+markers', name='Monte Carlo Price'))
+    fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
+                             mode='markers', marker=dict(color='red', size=10), name='Current S'))
+    fig.update_layout(title='Monte Carlo Option Price',
                       xaxis_title='Stock Price (S)',
                       yaxis_title='Option Price')
 
