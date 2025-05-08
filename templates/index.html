@@ -14,7 +14,7 @@
           <input type="radio" name="mode" value="manual" checked> Manual Input
       </label>
       <label>
-          <input type="radio" name="mode" value="historical"> Historical Data
+          <input type="radio" name="mode" value="historical"> Real World Data
       </label>
   </div>
 
@@ -37,6 +37,9 @@
             <label>Volatility (σ):</label>
             <input type="number" id="sigma" value="0.2" step="0.01" required><br>
 
+            <label>Market Price (Optional, for error analysis):</label>
+            <input type="number" id="market_price" placeholder="e.g., 2.18" step="any"><br>
+
             <label>Option Type:</label>
             <select id="option_type_manual">
             <option value="call">Call</option>
@@ -49,6 +52,7 @@
             <option value="binomial">Binomial</option>
             <option value="monte_carlo">Monte Carlo</option>
             <option value="pde">PDE (Crank-Nicolson)</option>
+            <option value="all">All Models</option>
             </select><br><br>
 
             <!-- Extra Inputs (Hidden by default) -->
@@ -111,13 +115,20 @@
                 <option value="pde">PDE (Crank-Nicolson)</option>
             </select><br><br>
 
+            <label for="volatility_source">Volatility Source:</label>
+            <select id="volatility_source" name="volatility_source">
+              <option value="constant">Constant (Historical Vol)</option>
+              <option value="garch">GARCH</option>
+              <option value="lstm">LSTM Forecast</option>
+            </select><br><br>
+
             <label>Exercise Style:</label>
             <select id="exercise_style_historical">
                 <option value="european">European</option>
                 <option value="american">American</option>
             </select><br>
 
-            <button type="submit">Get Historical Price</button>
+            <button type="submit">Get Price & Plot</button>
         </form>
 
         <!-- Display Calculated Historical Parameters -->
@@ -127,14 +138,42 @@
             <p>Volatility (σ): <span id="hist_sigma">--</span></p>
             <p>Time to Maturity (T): <span id="hist_T">--</span></p>
             <p>Risk-Free Rate (r): <span id="hist_r">--</span></p>
+            <p>Volatility Source: <span id="hist_vol_source">--</span></p> <!-- Added for volatility source display -->
         </div>
     </div>
 
     <div class="plot-container">
-        <div id="plot"></div>
-        <p id="output"></p>
-        <button id="rerunButton" style="display: none;">Rerun Simulations</button>
-    </div>
+        <!-- Primary display area: Main model plot OR "All Models" summary plot OR MC Analytics -->
+        <div id="primary-plot-area">
+            <!-- Container for standard plots (BS, Binomial, PDE, All Models Bar Chart) -->
+            <div id="standard-plot-display-area" style="display: block;"> <!-- Default visible -->
+                <div id="plot"></div>
+            </div>
+
+            <!-- Container for Monte Carlo specific analytics plots -->
+            <div id="monte-carlo-primary-analytics-display-area" style="display: none;"> <!-- Default hidden -->
+                <h4>Simulation Analytics</h4>
+                <div class="analytics-grid">
+                    <div id="gbm_plot_div" class="analytics-grid-item"></div>
+                    <div id="terminal_prices_histogram_div" class="analytics-grid-item"></div>
+                </div>
+            </div>
+            <p id="output"></p>
+            <button id="rerunButton" style="display: none;">Rerun Simulations</button>
+        </div>
+
+        <!-- Secondary display area for "All Models" details (table, error chart) -->
+        <div id="all-models-details-area" class="results-section" style="display: none;">
+            <h4>Detailed Model Comparison</h4>
+            <div id="pricing_table_div"></div>
+            <div id="error_bar_chart_div"></div>
+        </div>
+
+        <!-- Secondary display area for GBM Summary Statistics (used by Monte Carlo) -->
+        <div id="analytics-summary-container" class="results-section" style="display: none;">
+            <!-- Title for summary can be added here or dynamically via JS if needed -->
+            <div id="gbm_analytics_summary_div" class="analytics-summary"></div>
+        </div>
     </div>
   <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>

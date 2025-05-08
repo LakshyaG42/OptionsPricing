@@ -43,7 +43,7 @@ h2 {
     min-width: 400px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch; 
     flex-basis: 500px;
     flex-grow: 1.5;
     transition: all 0.3s ease-in-out;
@@ -119,9 +119,11 @@ h2 {
 
 #plot {
     width: 100%;
-    flex-grow: 1;
-    min-height: 350px;
+    flex-grow: 1; /* This allows #plot to grow within its flex parent (#standard-plot-display-area) */
+    min-height: 450px; /* Your desired minimum height */
+    overflow: hidden; /* Good for preventing content spill */
 }
+
 #output {
     text-align: center;
     margin-top: 20px; 
@@ -151,6 +153,131 @@ h2 {
 }
 #rerunButton:hover {
     background-color: #0056b3;
+}
+
+/* New styles for plot organization */
+#primary-plot-area {
+    width: 100%;
+    margin-bottom: 20px; /* Space before secondary areas */
+    display: flex; /* Make it a flex container */
+    flex-direction: column; /* Stack its children (plot area, output, button) vertically */
+    flex-grow: 1; /* Allow it to take up available vertical space in .plot-container */
+    min-height: 0; /* Important for flex children that also grow, prevents overflow issues */
+}
+
+#standard-plot-display-area,
+#monte-carlo-primary-analytics-display-area {
+    display: flex; /* Make these flex containers for their content */
+    flex-direction: column; /* Stack their children vertically */
+    flex-grow: 1; /* Allow these to take up available space in #primary-plot-area */
+    width: 100%; /* Ensure they span the full width */
+    min-height: 0; /* Important for nested flex children that grow */
+}
+
+/* Ensure the h4 in MC analytics area doesn't grow excessively */
+#monte-carlo-primary-analytics-display-area h4 {
+    flex-shrink: 0;
+}
+
+.analytics-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px; /* Space between grid items */
+    margin-bottom: 15px; /* Space before summary */
+    flex-grow: 1; /* Allow the grid itself to take available vertical space in its parent */
+}
+
+.analytics-grid-item {
+    flex: 1 1 calc(50% - 10px); /* Defines width in the grid */
+    min-width: 380px; /* Minimum width before wrapping */
+    position: relative; /* Needed for absolute positioning of children */
+    height: 0; /* Crucial for the padding-bottom hack */
+    padding-bottom: 50%; /* CHANGED from 75% to 60% (5:3 aspect ratio). Adjust as needed. e.g., 50% for 2:1, 56.25% for 16:9 */
+    box-sizing: border-box;
+    overflow: hidden; 
+}
+
+/* Ensure plotly plots fill their containers */
+.analytics-grid-item .js-plotly-plot,
+.analytics-grid-item > div > .js-plotly-plot { /* For cases where plotly nests an extra div */
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Target the first direct child div Plotly creates inside the MC plot divs */
+#gbm_plot_div > div.plot-container.plotly,
+#terminal_prices_histogram_div > div.plot-container.plotly {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%; /* This makes it fill the space defined by .analytics-grid-item's padding-bottom */
+    display: flex; /* This is fine here, for laying out .svg-container within it */
+    flex-direction: column;
+}
+
+/* Target the .svg-container inside the above */
+#gbm_plot_div > div.plot-container.plotly > .svg-container,
+#terminal_prices_histogram_div > div.plot-container.plotly > .svg-container {
+    flex-grow: 1 !important;
+    min-height: 0 !important; 
+    width: 100% !important;
+    /* height: 100% !important; is implicitly handled by flex-grow if parent is flex and has height */
+}
+
+/* Target the SVG element itself within the MC plot divs */
+#gbm_plot_div svg.main-svg,
+#terminal_prices_histogram_div svg.main-svg {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+/* Ensure the existing rule for .js-plotly-plot within .analytics-grid-item is still effective.
+   This rule makes the #gbm_plot_div and #terminal_prices_histogram_div (which get .js-plotly-plot class)
+   themselves take 100% width/height of their .analytics-grid-item dimensions,
+   which is implicitly handled as they ARE the .analytics-grid-item in this case.
+   The rule below is more for completeness if Plotly ever changed its classing.
+*/
+.analytics-grid-item .js-plotly-plot {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+#gbm_analytics_summary_div {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e9ecef; /* Match other light gray sections */
+    border-radius: 4px;
+}
+#gbm_analytics_summary_div h4 {
+    border-bottom: none; /* Remove double border if h4 is already styled by .results-section */
+    padding-bottom: 0;
+    margin-bottom: 10px;
+}
+
+
+#pricing_table_div, #error_bar_chart_div {
+    margin-bottom: 15px;
+}
+#error_bar_chart_div .js-plotly-plot {
+     width: 100% !important;
+     min-height: 300px; /* Give error bar chart some default height */
+}
+
+#pricing_table_div table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+#pricing_table_div th, #pricing_table_div td {
+    border: 1px solid #ddd;
+    padding: 10px;
+    text-align: left;
+}
+#pricing_table_div th {
+    background-color: #e9ecef;
+    font-weight: bold;
 }
 
 .mode-toggle {
@@ -200,5 +327,33 @@ h2 {
 }
 .calculated-params span {
     font-weight: bold;
+    color: #0056b3;
+}
+
+/* Styling for GBM Analytics Summary */
+.analytics-summary {
+    width: 100%;
+    margin-top: 20px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    font-size: 0.9em;
+}
+
+.analytics-summary h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 5px;
+}
+
+.analytics-summary p {
+    margin-bottom: 5px;
+    line-height: 1.4;
+}
+
+.analytics-summary strong {
     color: #0056b3;
 }
