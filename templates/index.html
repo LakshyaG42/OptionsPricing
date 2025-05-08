@@ -115,6 +115,13 @@
                 <option value="pde">PDE (Crank-Nicolson)</option>
             </select><br><br>
 
+            <label for="volatility_source">Volatility Source:</label>
+            <select id="volatility_source" name="volatility_source">
+              <option value="constant">Constant (Historical Vol)</option>
+              <option value="garch">GARCH</option>
+              <option value="lstm">LSTM Forecast</option>
+            </select><br><br>
+
             <label>Exercise Style:</label>
             <select id="exercise_style_historical">
                 <option value="european">European</option>
@@ -131,6 +138,7 @@
             <p>Volatility (σ): <span id="hist_sigma">--</span></p>
             <p>Time to Maturity (T): <span id="hist_T">--</span></p>
             <p>Risk-Free Rate (r): <span id="hist_r">--</span></p>
+            <p>Volatility Source: <span id="hist_vol_source">--</span></p> <!-- Added for volatility source display -->
         </div>
     </div>
 

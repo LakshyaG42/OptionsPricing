@@ -391,7 +391,8 @@ async function handleHistoricalFormSubmit() {
         K: parseFloat(document.getElementById("K_historical").value),
         option_type: document.getElementById("option_type_historical").value,
         model: document.getElementById("model_historical").value,
-        exercise_style: document.getElementById("exercise_style_historical").value
+        exercise_style: document.getElementById("exercise_style_historical").value,
+        volatility_source: document.getElementById("volatility_source").value // Added
     };
 
     if (!payload.ticker || !payload.quote_date || !payload.expiry_date || !payload.K) {
@@ -454,6 +455,7 @@ async function handleHistoricalFormSubmit() {
         document.getElementById("hist_sigma").innerText = result.sigma?.toFixed(4) ?? 'N/A';
         document.getElementById("hist_T").innerText = result.T?.toFixed(4) ?? 'N/A';
         document.getElementById("hist_r").innerText = result.r?.toFixed(4) ?? 'N/A';
+        document.getElementById("hist_vol_source").innerText = result.volatility_source ? result.volatility_source.charAt(0).toUpperCase() + result.volatility_source.slice(1) : 'Constant';
 
         let contentDisplayed = false;
         let mcPlotsExistHist = false; // Specific flag for historical MC plots
@@ -537,6 +539,7 @@ function clearHistoricalResults() {
      document.getElementById("hist_sigma").innerText = '--';
      document.getElementById("hist_T").innerText = '--';
      document.getElementById("hist_r").innerText = '--';
+     document.getElementById("hist_vol_source").innerText = '--'; // Clear vol source display
 }
 
 
@@ -545,11 +548,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- Set Date Defaults and Constraints ---
   const today = new Date();
   const todayString = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-
+  const yesterdayString = new Date(today.setDate(today.getDate() - 1)).toISOString().split('T')[0]; // Yesterday's date
   const quoteDateInput = document.getElementById("quote_date");
   if (quoteDateInput) {
       quoteDateInput.max = todayString; // Set max date to today
-      quoteDateInput.value = todayString; // Set default value to today
+      quoteDateInput.value = yesterdayString; // Set default value to today
   }
 
   const expiryDateInput = document.getElementById("expiry_date");

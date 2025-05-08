@@ -229,7 +229,13 @@ def route_plot():
     data = request.json
     model = data.get("model", "black_scholes")
     market_price = data.get("market_price") # This will be a float or None (if JS sent null)
-    
+    vol_source = data.get("volatility_source", "constant").lower() # Added
+
+    if vol_source == "lstm": # Check for LSTM in manual mode
+        return jsonify({"error": "LSTM volatility is only supported for historical data."}), 400
+    if vol_source == "garch": # Check for GARCH in manual mode
+        return jsonify({"error": "GARCH volatility is only supported for historical data."}), 400
+
     if "K" in data:
         data["K"] = float(data["K"])
     
@@ -289,6 +295,7 @@ def route_historical_price():
     option_type = data.get("option_type", "call")
     model = data.get("model", "black_scholes")
     exercise_style = data.get("exercise_style", "european")
+    vol_source = data.get("volatility_source", "constant").lower() # Added
     
     num_paths_analytics = data.get("n_simulations", 1000) 
     num_steps_analytics = data.get("n_steps", 100)
@@ -322,11 +329,49 @@ def route_historical_price():
             return jsonify({"error": f"Not enough historical data for {ticker_str} to calculate volatility before {quote_date_str}."}), 400
 
         hist_vol['LogReturn'] = np.log(hist_vol['Close'] / hist_vol['Close'].shift(1))
-        daily_std_dev = hist_vol['LogReturn'].std()
-        sigma = daily_std_dev * np.sqrt(252)
+        log_returns = hist_vol['LogReturn'].dropna()
 
-        if np.isnan(sigma) or sigma == 0:
-            return jsonify({"error": f"Could not calculate valid volatility for {ticker_str}."}), 400
+        if log_returns.empty:
+            return jsonify({"error": f"Could not calculate log returns for {ticker_str}."}), 400
+
+        # Volatility calculation based on source
+        sigma_display_name = "Constant (Historical)" # Default display name
+        if vol_source == "lstm":
+            try:
+                from lstm_helper import get_lstm_volatility
+                sigma = get_lstm_volatility(log_returns, scale_factor=np.sqrt(252))
+                sigma_display_name = "LSTM Forecast"
+            except FileNotFoundError as fnf_err:
+                app.logger.error(f"LSTM helper error: {fnf_err}")
+                return jsonify({"error": str(fnf_err)}), 500
+            except Exception as lstm_err:
+                app.logger.error(f"LSTM volatility calculation failed: {lstm_err}")
+                # Fallback to constant historical volatility on LSTM error
+                sigma = log_returns.std() * np.sqrt(252)
+                sigma_display_name = f"LSTM Error - Fallback Constant ({sigma:.4f})"
+                # Optionally, return an error to the user:
+                # return jsonify({"error": f"LSTM volatility calculation error: {str(lstm_err)}"}), 500
+        elif vol_source == "garch":
+            try:
+                from garch_helper import get_garch_volatility 
+                sigma = get_garch_volatility(log_returns) # Assumes it returns annualized vol
+                sigma_display_name = "GARCH"
+            except ImportError:
+                app.logger.error("GARCH helper not found, falling back to constant volatility.")
+                sigma = log_returns.std() * np.sqrt(252)
+                sigma_display_name = f"GARCH Error - Fallback Constant ({sigma:.4f})"
+                # return jsonify({"error": "GARCH model processing failed (helper not found). Please select another volatility source."}), 500
+            except Exception as e_garch:
+                app.logger.error(f"GARCH volatility calculation failed: {e_garch}")
+                sigma = log_returns.std() * np.sqrt(252)
+                sigma_display_name = f"GARCH Error - Fallback Constant ({sigma:.4f})"
+                # return jsonify({"error": f"GARCH volatility calculation error: {str(e_garch)}"}), 500
+        else:  # default to "constant" vol
+            sigma = log_returns.std() * np.sqrt(252)
+            # sigma_display_name is already "Constant (Historical)"
+
+        if np.isnan(sigma) or sigma <= 0: # Sigma must be positive
+            return jsonify({"error": f"Could not calculate valid positive volatility for {ticker_str} (source: {vol_source}, calculated value: {sigma})."}), 400
 
         T = (expiry_date - quote_date).days / 365.0
         if T <= 0:
@@ -403,6 +448,7 @@ def route_historical_price():
             "r": r,
             "price": price,
             "plot": plot_json,
+            "volatility_source": sigma_display_name # Added for frontend display
         }
         if model == "monte_carlo":
             final_response.update(analytics_package)
