@@ -17,7 +17,8 @@ from datetime import datetime, timedelta
 from models.black_scholes import price_option
 from models.binomial import binomial_price
 from models.pde import crank_nicolson_call, crank_nicolson_put
-#from models.gbm import simulate_gbm
+from models.lstm import LSTMModel, LSTMTrainer, prepare_sequences
+from models.garch import GARCH
 from models.monte_carlo import MonteCarloOptionPricer
 
 @cache.memoize(timeout=3600)  # Cache for 1 hour
@@ -470,6 +471,126 @@ def plot_monte_carlo(data):
         "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
         "price": user_price
     }
+
+
+@app.route("/volatility", methods=["POST"])
+def route_volatility():
+    data = request.json
+    ticker_str = data.get("ticker")
+    start_date_str = data.get("start_date")
+    end_date_str = data.get("end_date")
+    model = data.get("model", "garch")  # Default to GARCH
+    
+    if not all([ticker_str, start_date_str, end_date_str]):
+        return jsonify({"error": "Missing required parameters."}), 400
+
+    try:
+        # Fetch historical data
+        hist_data = get_stock_history(ticker_str, start_date_str, end_date_str)
+        if hist_data.empty:
+            return jsonify({"error": f"Could not fetch stock data for {ticker_str}."}), 400
+
+        # Calculate returns
+        returns = np.log(hist_data['Close'] / hist_data['Close'].shift(1)).dropna().values
+        
+        if model == "garch":
+            # Fit GARCH model
+            garch = GARCH(p=1, q=1)
+            params, variances = garch.fit(returns)
+            
+            # Create volatility plot
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=hist_data.index[1:],  # Skip first day due to return calculation
+                y=np.sqrt(variances * 252),  # Annualized volatility
+                mode='lines',
+                name='GARCH Volatility'
+            ))
+            fig.update_layout(
+                title=f'GARCH Volatility Forecast for {ticker_str}',
+                xaxis_title='Date',
+                yaxis_title='Annualized Volatility',
+                template='plotly_white'
+            )
+            
+            # Forecast next 5 days
+            forecast = garch.forecast(returns, horizon=5)
+            forecast_dates = pd.date_range(
+                start=hist_data.index[-1] + timedelta(days=1),
+                periods=5,
+                freq='B'
+            )
+            
+            fig.add_trace(go.Scatter(
+                x=forecast_dates,
+                y=np.sqrt(forecast * 252),
+                mode='lines+markers',
+                name='Forecast',
+                line=dict(dash='dash')
+            ))
+            
+            return jsonify({
+                "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
+                "current_volatility": float(np.sqrt(variances[-1] * 252)),
+                "forecast_volatility": float(np.sqrt(forecast[-1] * 252))
+            })
+            
+        elif model == "lstm":
+            # Prepare data for LSTM
+            seq_length = 20
+            X, y = prepare_sequences(returns.reshape(-1, 1), seq_length)
+            
+            # Create and train LSTM model
+            model = LSTMModel(
+                input_size=1,
+                hidden_size=32,
+                num_layers=2,
+                output_size=1,
+                dropout=0.2
+            )
+            trainer = LSTMTrainer(model, learning_rate=0.001)
+            
+            # Train the model
+            num_epochs = 50
+            batch_size = 32
+            for epoch in range(num_epochs):
+                indices = np.random.permutation(len(X))
+                for i in range(0, len(X), batch_size):
+                    batch_indices = indices[i:i + batch_size]
+                    batch_X = X[batch_indices]
+                    batch_y = y[batch_indices]
+                    trainer.train_step(batch_X, batch_y)
+            
+            # Make predictions
+            predictions = trainer.predict(X)
+            volatilities = np.sqrt(predictions.numpy() * 252)  # Annualized volatility
+            
+            # Create volatility plot
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=hist_data.index[seq_length:],
+                y=volatilities,
+                mode='lines',
+                name='LSTM Volatility'
+            ))
+            fig.update_layout(
+                title=f'LSTM Volatility Forecast for {ticker_str}',
+                xaxis_title='Date',
+                yaxis_title='Annualized Volatility',
+                template='plotly_white'
+            )
+            
+            return jsonify({
+                "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
+                "current_volatility": float(volatilities[-1])
+            })
+            
+        else:
+            return jsonify({"error": f"Model '{model}' not supported."}), 400
+
+    except Exception as e:
+        app.logger.error(f"Error in /volatility: {e}")
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 
 if __name__ == "__main__":
