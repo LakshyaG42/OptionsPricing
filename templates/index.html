@@ -118,6 +118,7 @@
             <label for="volatility_source">Volatility Source:</label>
             <select id="volatility_source" name="volatility_source">
               <option value="constant">Constant (Historical Vol)</option>
+              <option value="short_term_historical">Short-term Historical (1M)</option>
               <option value="garch">GARCH</option>
               <option value="lstm">LSTM Forecast</option>
             </select><br><br>
@@ -160,6 +161,12 @@
             </div>
             <p id="output"></p>
             <button id="rerunButton" style="display: none;">Rerun Simulations</button>
+        </div>
+
+        <!-- New container for Historical Volatility Chart -->
+        <div id="historical-volatility-chart-area" class="results-section" style="display: none;">
+            <h4>Historical and Forecasted Volatility</h4>
+            <div id="volatility_plot_div"></div>
         </div>
 
         <!-- Secondary display area for "All Models" details (table, error chart) -->

@@ -1,16 +1,18 @@
+// --- Model Parameters and Global State ---
 const modelParamMap = {
     black_scholes: [],
     binomial: ["n_steps"],
     monte_carlo: ["n_steps", "n_simulations"],
     pde: ["x_max", "n_t"],
     all: ["n_steps", "n_simulations"] // For Binomial and MC components of "All Models"
-  };
+};
 
-  let lastSuccessfulPayload = null; // Variable to store the last successful payload
-  let lastSuccessfulHistoricalPayload = null; // Cache for historical mode
+let lastSuccessfulPayload = null; // Variable to store the last successful payload
+let lastSuccessfulHistoricalPayload = null; // Cache for historical mode
 
-  // Helper function for deep object comparison
-  function deepEqual(obj1, obj2) {
+// --- Helper Functions ---
+// Helper function for deep object comparison
+function deepEqual(obj1, obj2) {
     if (obj1 === obj2) return true;
     if (obj1 == null || typeof obj1 !== "object" || obj2 == null || typeof obj2 !== "object") return false;
 
@@ -20,38 +22,43 @@ const modelParamMap = {
     if (keys1.length !== keys2.length) return false;
 
     for (const key of keys1) {
-      if (!keys2.includes(key) || !deepEqual(obj1[key], obj2[key])) return false;
+        if (!keys2.includes(key) || !deepEqual(obj1[key], obj2[key])) return false;
     }
 
     return true;
-  }
+}
 
-  const rerunButton = document.getElementById("rerunButton");
-  const mainContainer = document.querySelector(".main-container");
-  const manualForm = document.getElementById("optionForm");
-  const historicalForm = document.getElementById("historicalForm");
-  const modeRadios = document.querySelectorAll('input[name="mode"]');
-  const historicalModelSelect = document.getElementById("model_historical");
-  const historicalExerciseStyleSelect = document.getElementById("exercise_style_historical");
+// --- DOM Element References ---
+const rerunButton = document.getElementById("rerunButton");
+const mainContainer = document.querySelector(".main-container");
+const manualForm = document.getElementById("optionForm");
+const historicalForm = document.getElementById("historicalForm");
+const modeRadios = document.querySelectorAll('input[name="mode"]');
+const historicalModelSelect = document.getElementById("model_historical");
+const historicalExerciseStyleSelect = document.getElementById("exercise_style_historical");
 
-  // Get references to the new display areas
-  const standardPlotDisplayArea = document.getElementById("standard-plot-display-area");
-  const mcPrimaryAnalyticsDisplayArea = document.getElementById("monte-carlo-primary-analytics-display-area");
-  const allModelsDetailsArea = document.getElementById("all-models-details-area");
-  const analyticsSummaryContainer = document.getElementById("analytics-summary-container");
+// Get references to the new display areas
+const standardPlotDisplayArea = document.getElementById("standard-plot-display-area");
+const mcPrimaryAnalyticsDisplayArea = document.getElementById("monte-carlo-primary-analytics-display-area");
+const allModelsDetailsArea = document.getElementById("all-models-details-area");
+const analyticsSummaryContainer = document.getElementById("analytics-summary-container");
+const historicalVolatilityChartArea = document.getElementById("historical-volatility-chart-area"); 
 
-  function handleModeChange() {
+// --- Mode Switching Logic ---
+function handleModeChange() {
     const selectedMode = document.querySelector('input[name="mode"]:checked').value;
     // Clear all plots and results when mode changes
     Plotly.purge("plot");
     Plotly.purge("gbm_plot_div");
     Plotly.purge("terminal_prices_histogram_div");
     Plotly.purge("error_bar_chart_div");
+    Plotly.purge("volatility_plot_div"); 
 
     standardPlotDisplayArea.style.display = "none";
     mcPrimaryAnalyticsDisplayArea.style.display = "none";
     allModelsDetailsArea.style.display = "none";
     analyticsSummaryContainer.style.display = "none";
+    historicalVolatilityChartArea.style.display = "none"; 
 
     document.getElementById("gbm_analytics_summary_div").innerHTML = "";
     document.getElementById("pricing_table_div").innerHTML = "";
@@ -74,13 +81,14 @@ const modelParamMap = {
         updateVisibleInputs();
         updateHistoricalVisibleInputs();
     }
-  }
+}
 
-  modeRadios.forEach(radio => {
-      radio.addEventListener('change', handleModeChange);
-  });
+modeRadios.forEach(radio => {
+    radio.addEventListener('change', handleModeChange);
+});
 
-  function updateVisibleInputs() {
+// --- Dynamic Input Visibility ---
+function updateVisibleInputs() {
     const selectedModelEl = document.getElementById("model_manual");
     const exerciseStyleSelectEl = document.getElementById("exercise_style_manual");
     if (!selectedModelEl || !exerciseStyleSelectEl) {
@@ -95,13 +103,13 @@ const modelParamMap = {
     allFields.forEach(field => {
         const el = document.getElementById(`${field}_container`);
         if (el) { 
-             if (modelParamMap[selectedModel]?.includes(field)) {
+            if (modelParamMap[selectedModel]?.includes(field)) {
                 el.style.display = "block";
             } else {
                 el.style.display = "none";
             }
         } else {
-           console.warn(`Element container not found: ${field}_container`);
+            console.warn(`Element container not found: ${field}_container`);
         }
     });
 
@@ -122,7 +130,7 @@ const modelParamMap = {
     }
 }
 
-// --- New Function for Historical Form Visibility ---
+// --- Historical Form Input Visibility ---
 function updateHistoricalVisibleInputs() {
     const selectedModelEl = document.getElementById("model_historical");
     const exerciseStyleSelectEl = document.getElementById("exercise_style_historical");
@@ -153,21 +161,23 @@ function updateHistoricalVisibleInputs() {
     // If it is Monte Carlo, visibility is handled by handleHistoricalFormSubmit
 }
 
-  const manualModelSelect = document.getElementById("model_manual");
-  if (manualModelSelect) {
-      manualModelSelect.addEventListener("change", updateVisibleInputs);
-  }
-  // Add listener for historical model change
-  if (historicalModelSelect) {
-      historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
-  }
+// --- Initial Input Visibility Setup ---
+const manualModelSelect = document.getElementById("model_manual");
+if (manualModelSelect) {
+    manualModelSelect.addEventListener("change", updateVisibleInputs);
+}
+// Add listener for historical model change
+if (historicalModelSelect) {
+    historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
+}
 
-  window.addEventListener("DOMContentLoaded", () => {
-      updateVisibleInputs();
-      updateHistoricalVisibleInputs(); 
-  });
+window.addEventListener("DOMContentLoaded", () => {
+    updateVisibleInputs();
+    updateHistoricalVisibleInputs(); 
+});
 
-  async function handleManualFormSubmit() {
+// --- Manual Form Submission ---
+async function handleManualFormSubmit() {
     const marketPriceInput = document.getElementById("market_price");
     let marketPrice = null;
     if (marketPriceInput && marketPriceInput.value.trim() !== "") {
@@ -203,7 +213,7 @@ function updateHistoricalVisibleInputs() {
         console.log("Manual payload hasn't changed. Using cached result.");
         if (lastSuccessfulPayload) mainContainer.classList.add("plot-active");
         if (payload.model === "monte_carlo" && (document.getElementById('gbm_plot_div').children.length > 0 || document.getElementById('terminal_prices_histogram_div').children.length > 0) ) {
-             rerunButton.style.display = "block";
+            rerunButton.style.display = "block";
         }
         return;
     }
@@ -212,11 +222,13 @@ function updateHistoricalVisibleInputs() {
     Plotly.purge("gbm_plot_div");
     Plotly.purge("terminal_prices_histogram_div");
     Plotly.purge("error_bar_chart_div");
+    Plotly.purge("volatility_plot_div"); 
 
     standardPlotDisplayArea.style.display = "none";
     mcPrimaryAnalyticsDisplayArea.style.display = "none";
     allModelsDetailsArea.style.display = "none";
     analyticsSummaryContainer.style.display = "none";
+    historicalVolatilityChartArea.style.display = "none"; 
 
     document.getElementById("gbm_analytics_summary_div").innerHTML = "";
     document.getElementById("pricing_table_div").innerHTML = "";
@@ -242,7 +254,7 @@ function updateHistoricalVisibleInputs() {
             if (result.combined_plot) {
                 const combinedPlotData = JSON.parse(result.combined_plot);
                 standardPlotDisplayArea.style.display = "block"; // Make parent visible BEFORE plotting
-                Plotly.newPlot("plot", combinedPlotData.data, combinedPlotData.layout); // Simpler call
+                Plotly.newPlot("plot", combinedPlotData.data, combinedPlotData.layout);
                 requestAnimationFrame(() => Plotly.Plots.resize(document.getElementById('plot')));
                 contentDisplayed = true;
             }
@@ -277,6 +289,7 @@ function updateHistoricalVisibleInputs() {
             requestAnimationFrame(() => {
                 if (document.getElementById('plot').children.length > 0) Plotly.Plots.resize(document.getElementById('plot'));
                 if (document.getElementById('error_bar_chart_div').children.length > 0) Plotly.Plots.resize(document.getElementById('error_bar_chart_div'));
+                // No volatility plot in manual "all models" mode
             });
 
             document.getElementById("output").innerText = contentDisplayed ? "All models processed." : "No data to display for 'All Models'.";
@@ -342,9 +355,9 @@ function updateHistoricalVisibleInputs() {
         } else { // For Black-Scholes, Binomial, PDE
             if (result.plot) {
                 try {
-                    const plotData = JSON.parse(result.plot); // Use a different variable name
+                    const plotData = JSON.parse(result.plot);
                     standardPlotDisplayArea.style.display = "block"; // Make parent visible BEFORE plotting
-                    Plotly.newPlot("plot", plotData.data, plotData.layout); // Simpler call
+                    Plotly.newPlot("plot", plotData.data, plotData.layout);
                     requestAnimationFrame(() => Plotly.Plots.resize(document.getElementById('plot')));
                     contentDisplayed = true;
                 } catch (e) { console.error("Error rendering main plot:", e); Plotly.purge("plot");}
@@ -359,6 +372,7 @@ function updateHistoricalVisibleInputs() {
             if (document.getElementById('plot').children.length > 0) Plotly.Plots.resize(document.getElementById('plot'));
             if (document.getElementById('gbm_plot_div').children.length > 0) Plotly.Plots.resize(document.getElementById('gbm_plot_div'));
             if (document.getElementById('terminal_prices_histogram_div').children.length > 0) Plotly.Plots.resize(document.getElementById('terminal_prices_histogram_div'));
+            // No volatility plot in manual single model mode
         });
 
         let priceText = "";
@@ -366,8 +380,8 @@ function updateHistoricalVisibleInputs() {
             priceText = `Model Price: $${result.price.toFixed(4)}`;
         }
         if (payload.model === "monte_carlo" && result.monte_carlo_price_from_analytics_sim !== undefined && result.monte_carlo_price_from_analytics_sim !== null) {
-             // For MC, the primary price IS the sim price.
-             priceText = `MC (Sim) Price: $${result.monte_carlo_price_from_analytics_sim.toFixed(4)}`;
+            // For MC, the primary price IS the sim price.
+            priceText = `MC (Sim) Price: $${result.monte_carlo_price_from_analytics_sim.toFixed(4)}`;
         } else if (result.monte_carlo_price_from_analytics_sim !== undefined && result.monte_carlo_price_from_analytics_sim !== null) {
             // This case should ideally not happen if backend is correct, but as a fallback
             if (priceText) priceText += " | ";
@@ -383,6 +397,7 @@ function updateHistoricalVisibleInputs() {
     }
 }
 
+// --- Historical Form Submission ---
 async function handleHistoricalFormSubmit() {
     const payload = {
         ticker: document.getElementById("ticker").value,
@@ -392,7 +407,7 @@ async function handleHistoricalFormSubmit() {
         option_type: document.getElementById("option_type_historical").value,
         model: document.getElementById("model_historical").value,
         exercise_style: document.getElementById("exercise_style_historical").value,
-        volatility_source: document.getElementById("volatility_source").value // Added
+        volatility_source: document.getElementById("volatility_source").value 
     };
 
     if (!payload.ticker || !payload.quote_date || !payload.expiry_date || !payload.K) {
@@ -406,13 +421,16 @@ async function handleHistoricalFormSubmit() {
     if (deepEqual(payload, lastSuccessfulHistoricalPayload)) {
         console.log("Historical payload hasn't changed. Using cached result.");
         if (document.getElementById('plot').children.length > 0 || mcPrimaryAnalyticsDisplayArea.style.display === 'block') {
-             mainContainer.classList.add("plot-active");
+            mainContainer.classList.add("plot-active");
+        }
+        if (document.getElementById('volatility_plot_div').children.length > 0) {  // Added for vol chart cache
+            historicalVolatilityChartArea.style.display = "block";
         }
         // Visibility for rerun button on cached result
         if (payload.model === "monte_carlo" &&
             (mcPrimaryAnalyticsDisplayArea.style.display === 'block' ||
-             (document.getElementById('gbm_plot_div').children.length > 0 ||
-              document.getElementById('terminal_prices_histogram_div').children.length > 0))) {
+                (document.getElementById('gbm_plot_div').children.length > 0 ||
+                document.getElementById('terminal_prices_histogram_div').children.length > 0))) {
             rerunButton.style.display = "block";
         } else { 
             rerunButton.style.display = "none";
@@ -424,11 +442,13 @@ async function handleHistoricalFormSubmit() {
     Plotly.purge("gbm_plot_div");
     Plotly.purge("terminal_prices_histogram_div");
     // Plotly.purge("error_bar_chart_div"); // Not typically used for historical single model
+    Plotly.purge("volatility_plot_div"); 
 
     standardPlotDisplayArea.style.display = "none";
     mcPrimaryAnalyticsDisplayArea.style.display = "none";
     allModelsDetailsArea.style.display = "none"; // Should be hidden for single historical model
     analyticsSummaryContainer.style.display = "none";
+    historicalVolatilityChartArea.style.display = "none"; 
 
     document.getElementById("gbm_analytics_summary_div").innerHTML = "";
     // document.getElementById("pricing_table_div").innerHTML = ""; // Not typically used
@@ -459,6 +479,13 @@ async function handleHistoricalFormSubmit() {
 
         let contentDisplayed = false;
         let mcPlotsExistHist = false; // Specific flag for historical MC plots
+
+        // Plot volatility chart if data is available
+        if (result.volatility_chart_data) {
+            plotVolatilityChart(result.volatility_chart_data);
+            contentDisplayed = true; // Volatility chart itself is content
+        }
+
 
         if (payload.model === "monte_carlo") {
             mcPrimaryAnalyticsDisplayArea.style.display = "block";
@@ -500,7 +527,7 @@ async function handleHistoricalFormSubmit() {
                 try {
                     const plotData = JSON.parse(result.plot);
                     standardPlotDisplayArea.style.display = "block"; // Make parent visible BEFORE plotting
-                    Plotly.newPlot("plot", plotData.data, plotData.layout); // Simpler call
+                    Plotly.newPlot("plot", plotData.data, plotData.layout);
                     requestAnimationFrame(() => Plotly.Plots.resize(document.getElementById('plot')));
                     contentDisplayed = true;
                 } catch (plotError) { console.error("Error plotting (hist):", plotError); Plotly.purge("plot");}
@@ -516,6 +543,7 @@ async function handleHistoricalFormSubmit() {
             if (document.getElementById('plot').children.length > 0) Plotly.Plots.resize(document.getElementById('plot'));
             if (document.getElementById('gbm_plot_div').children.length > 0) Plotly.Plots.resize(document.getElementById('gbm_plot_div'));
             if (document.getElementById('terminal_prices_histogram_div').children.length > 0) Plotly.Plots.resize(document.getElementById('terminal_prices_histogram_div'));
+            if (document.getElementById('volatility_plot_div').children.length > 0) Plotly.Plots.resize(document.getElementById('volatility_plot_div')); 
         });
 
         let priceTextHist = "";
@@ -529,100 +557,196 @@ async function handleHistoricalFormSubmit() {
     } catch (err) {
         document.getElementById("output").innerText = "Failed to fetch historical price or analytics.";
         lastSuccessfulHistoricalPayload = null;
-        rerunButton.style.display = "none"; // Hide on error
+        rerunButton.style.display = "none";
         console.error("Error in handleHistoricalFormSubmit:", err);
     }
 }
 
+// --- Clearing Historical Data Displays ---
 function clearHistoricalResults() {
-     document.getElementById("hist_S").innerText = '--';
-     document.getElementById("hist_sigma").innerText = '--';
-     document.getElementById("hist_T").innerText = '--';
-     document.getElementById("hist_r").innerText = '--';
-     document.getElementById("hist_vol_source").innerText = '--'; // Clear vol source display
+    document.getElementById("hist_S").innerText = '--';
+    document.getElementById("hist_sigma").innerText = '--';
+    document.getElementById("hist_T").innerText = '--';
+    document.getElementById("hist_r").innerText = '--';
+    document.getElementById("hist_vol_source").innerText = '--'; // Clear vol source display
+    Plotly.purge("volatility_plot_div"); // Also clear vol plot when clearing historical results
+    if (historicalVolatilityChartArea) historicalVolatilityChartArea.style.display = "none";
 }
 
+// --- Volatility Chart Plotting ---
+function plotVolatilityChart(volData) {
+    if (!volData || !volData.dates_historical || !volData.values_historical) {
+        console.warn("Volatility chart data is incomplete.");
+        Plotly.purge("volatility_plot_div");
+        historicalVolatilityChartArea.style.display = "none";
+        return;
+    }
 
-// --- Event Listeners ---
+    const traceHistorical = {
+        x: volData.dates_historical,
+        y: volData.values_historical,
+        mode: 'lines+markers',
+        type: 'scatter',
+        name: 'Historical Realized Volatility (Annualized)',
+        line: { color: 'blue' },
+        marker: { size: 4 }
+    };
+
+    const traces = [traceHistorical];
+    const shapes = [];
+    const annotations = [];
+
+    // Add forecasted sigma line/point
+    if (volData.predicted_sigma !== undefined && volData.quote_date) {
+        // Plot as a horizontal line segment from quote_date to expiry_date; if expiry_date is too far, just a point or short segment from quote_date
+        let forecastEndDate = volData.expiry_date;
+         
+        traces.push({
+            x: [volData.quote_date, forecastEndDate],
+            y: [volData.predicted_sigma, volData.predicted_sigma],
+            mode: 'lines',
+            type: 'scatter',
+            name: `Forecasted Volatility (${(volData.predicted_sigma * 100).toFixed(2)}%)`,
+            line: { color: 'red', dash: 'dash' }
+        });
+    }
+    
+    // Add vertical line at quote date
+    if (volData.quote_date) {
+        shapes.push({
+            type: 'line',
+            x0: volData.quote_date,
+            x1: volData.quote_date,
+            y0: 0,
+            y1: 1,
+            yref: 'paper',
+            line: {
+                color: 'green',
+                width: 2,
+                dash: 'dot'
+            }
+        });
+        annotations.push({
+            x: volData.quote_date,
+            y: 1.05,
+            yref: 'paper',
+            text: 'Quote Date',
+            showarrow: false,
+            xanchor: 'center'
+        });
+    }
+
+    const layout = {
+        title: 'Historical and Forecasted Volatility',
+        xaxis: {
+            title: 'Date',
+            type: 'date',
+            tickformat: '%Y-%m-%d',
+            rangeslider: {visible: true}
+        },
+        yaxis: {
+            title: 'Annualized Volatility',
+            tickformat: '.2%' 
+        },
+        shapes: shapes,
+        annotations: annotations,
+        showlegend: true,
+        legend: {
+            orientation: "h",
+            yanchor: "bottom",
+            y: 1.02,
+            xanchor: "right",
+            x: 1
+        },
+        autosize: true,
+        margin: { t: 50, b: 80 } 
+    };
+
+    historicalVolatilityChartArea.style.display = "block";
+    Plotly.newPlot('volatility_plot_div', traces, layout, {responsive: true});
+    requestAnimationFrame(() => Plotly.Plots.resize(document.getElementById('volatility_plot_div')));
+}
+
+// --- Page Load and Event Listeners Setup ---
 document.addEventListener("DOMContentLoaded", () => {
-  // --- Set Date Defaults and Constraints ---
-  const today = new Date();
-  const todayString = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
-  const yesterdayString = new Date(today.setDate(today.getDate() - 1)).toISOString().split('T')[0]; // Yesterday's date
-  const quoteDateInput = document.getElementById("quote_date");
-  if (quoteDateInput) {
-      quoteDateInput.max = todayString; // Set max date to today
-      quoteDateInput.value = yesterdayString; // Set default value to today
-  }
+    // --- Set Date Defaults and Constraints ---
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    const yesterdayString = new Date(today.setDate(today.getDate() - 1)).toISOString().split('T')[0]; // Yesterday's date
+    const quoteDateInput = document.getElementById("quote_date");
+    if (quoteDateInput) {
+        quoteDateInput.max = todayString; // Set max date to today
+        quoteDateInput.value = yesterdayString; // Set default value to today
+    }
 
-  const expiryDateInput = document.getElementById("expiry_date");
-  if (expiryDateInput) {
-      const nextYear = new Date(today);
-      nextYear.setFullYear(today.getFullYear() + 1);
-      const nextYearString = nextYear.toISOString().split('T')[0];
-      expiryDateInput.value = nextYearString; // Set default expiry to one year from today
-  }
-  // --- End Date Setup ---
+    const expiryDateInput = document.getElementById("expiry_date");
+    if (expiryDateInput) {
+        const nextYear = new Date(today);
+        nextYear.setFullYear(today.getFullYear() + 1);
+        const nextYearString = nextYear.toISOString().split('T')[0];
+        expiryDateInput.value = nextYearString; // Set default expiry to one year from today
+    }
+    // --- End Date Setup ---
 
-  // Initial setup
-  handleModeChange(); // Set initial visibility based on default checked radio
+    // Initial setup
+    handleModeChange();
 
-  // Listener for manual model change
-  const manualModelSelect = document.getElementById("model_manual");
-  if (manualModelSelect) {
-      manualModelSelect.addEventListener("change", updateVisibleInputs);
-  } else {
-      console.error("Manual model select not found!");
-  }
+    // Listener for manual model change
+    const manualModelSelect = document.getElementById("model_manual");
+    if (manualModelSelect) {
+        manualModelSelect.addEventListener("change", updateVisibleInputs);
+    } else {
+        console.error("Manual model select not found!");
+    }
 
-  // Add listener for historical model change
-  if (historicalModelSelect) {
-      historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
-  } else {
-      console.error("Historical model select not found!");
-  }
+    // Add listener for historical model change
+    if (historicalModelSelect) {
+        historicalModelSelect.addEventListener("change", updateHistoricalVisibleInputs);
+    } else {
+        console.error("Historical model select not found!");
+    }
 
-  // Manual form submission listener
-  if (manualForm) {
-      manualForm.addEventListener("submit", (e) => {
-          e.preventDefault();
-          handleManualFormSubmit();
-      });
-  } else {
-       console.error("Manual form not found!");
-  }
+    // Manual form submission listener
+    if (manualForm) {
+        manualForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            handleManualFormSubmit();
+        });
+    } else {
+        console.error("Manual form not found!");
+    }
 
-  // Historical form submission listener
-  if (historicalForm) {
-      historicalForm.addEventListener("submit", (e) => {
-          e.preventDefault();
-          handleHistoricalFormSubmit();
-      });
-  } else {
-       console.error("Historical form not found!");
-  }
+    // Historical form submission listener
+    if (historicalForm) {
+        historicalForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+            handleHistoricalFormSubmit();
+        });
+    } else {
+        console.error("Historical form not found!");
+    }
 
-  // Rerun button click listener (only relevant for manual Monte Carlo)
-  if (rerunButton) {
-      rerunButton.addEventListener("click", () => {
-          const currentMode = document.querySelector('input[name="mode"]:checked').value;
-          if (currentMode === 'manual') {
-              const selectedModel = document.getElementById("model_manual").value;
-              if (selectedModel === "monte_carlo") {
-                  lastSuccessfulPayload = null; 
-                  console.log("Rerunning Monte Carlo simulation (manual)...");
-                  handleManualFormSubmit(); 
-              }
-          } 
-          // Rerun for historical Monte Carlo
-          else if (currentMode === 'historical') {
-             const selectedModel = document.getElementById("model_historical").value;
-             if (selectedModel === "monte_carlo") {
-                 lastSuccessfulHistoricalPayload = null;
-                 console.log("Rerunning Monte Carlo simulation (historical)...");
-                 handleHistoricalFormSubmit();
-             }
-          }
-      });
-  }
+    // Rerun button click listener (only relevant for manual Monte Carlo)
+    if (rerunButton) {
+        rerunButton.addEventListener("click", () => {
+            const currentMode = document.querySelector('input[name="mode"]:checked').value;
+            if (currentMode === 'manual') {
+                const selectedModel = document.getElementById("model_manual").value;
+                if (selectedModel === "monte_carlo") {
+                    lastSuccessfulPayload = null; 
+                    console.log("Rerunning Monte Carlo simulation (manual)...");
+                    handleManualFormSubmit(); 
+                }
+            } 
+            // Rerun for historical Monte Carlo
+            else if (currentMode === 'historical') {
+                const selectedModel = document.getElementById("model_historical").value;
+                if (selectedModel === "monte_carlo") {
+                    lastSuccessfulHistoricalPayload = null;
+                    console.log("Rerunning Monte Carlo simulation (historical)...");
+                    handleHistoricalFormSubmit();
+                }
+            }
+        });
+    }
 });

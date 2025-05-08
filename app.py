@@ -1,3 +1,4 @@
+# --- Flask App Setup and Imports ---
 from flask import Flask, render_template, request, jsonify
 from flask_caching import Cache
 app = Flask(__name__)
@@ -20,6 +21,7 @@ from models.pde import crank_nicolson_call, crank_nicolson_put
 from models.gbm import simulate_gbm_paths, calculate_payoffs, get_gbm_analytics
 
 
+# --- Caching Data Fetchers ---
 @cache.memoize(timeout=3600)  # Cache for 1 hour
 def get_stock_history(ticker_symbol, start_date_str, end_date_str):
     app.logger.info(f"Fetching stock history for {ticker_symbol} from {start_date_str} to {end_date_str}")
@@ -41,11 +43,13 @@ def get_risk_free_rate_history(end_date_str, period_str):
     return irx.history(end=end_date_str, period=period_str, auto_adjust=False)
 
 
+# --- Main App Route ---
 @app.route("/")
 def home():
     return render_template("index.html")
 
 
+# --- Plotting Helper Functions ---
 def plot_pnl_histogram(pnl_counts, pnl_bin_edges, model_name):
     """Generates a Plotly JSON for the P&L histogram."""
     fig = go.Figure(data=[go.Bar(
@@ -93,6 +97,7 @@ def plot_terminal_prices_histogram(terminal_prices_counts, terminal_prices_bin_e
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
 
+# --- Core Analytics and Plotting Logic ---
 def generate_full_analytics_package(data, model_price, model_name_str, num_paths_sim=1000, num_steps_sim=100):
     """
     Helper to generate GBM simulation, its plot, MC price, Terminal Prices histogram, and stats.
@@ -224,6 +229,7 @@ def plot_all_models_data(data, market_price_from_payload):
     }
 
 
+# --- API Endpoint for Manual Mode Plotting ---
 @app.route("/plot", methods=["POST"])
 def route_plot():
     data = request.json
@@ -285,6 +291,7 @@ def route_plot():
         return jsonify({"error": f"Unknown model: {model}"}), 400
 
 
+# --- API Endpoint for Historical Mode Pricing ---
 @app.route("/historical_price", methods=["POST"])
 def route_historical_price():
     data = request.json
@@ -334,6 +341,19 @@ def route_historical_price():
         if log_returns.empty:
             return jsonify({"error": f"Could not calculate log returns for {ticker_str}."}), 400
 
+        # Calculate realized volatility for the chart
+        # Use a rolling window, e.g., 20 trading days for realized vol calculation
+        rolling_window_vol = 20
+        realized_vol_daily_for_chart = log_returns.rolling(window=rolling_window_vol).std()
+        realized_vol_annualized_for_chart = realized_vol_daily_for_chart * np.sqrt(252)
+        realized_vol_annualized_for_chart = realized_vol_annualized_for_chart.dropna()
+        
+        # Prepare data for the volatility chart (take last year of data for the chart up to quote_date)
+        vol_chart_data_historical = realized_vol_annualized_for_chart.loc[:quote_date_str].tail(252)
+        
+        vol_chart_dates_historical = vol_chart_data_historical.index.strftime('%Y-%m-%d').tolist()
+        vol_chart_values_historical = vol_chart_data_historical.values.tolist()
+
         # Volatility calculation based on source
         sigma_display_name = "Constant (Historical)" # Default display name
         if vol_source == "lstm":
@@ -346,11 +366,8 @@ def route_historical_price():
                 return jsonify({"error": str(fnf_err)}), 500
             except Exception as lstm_err:
                 app.logger.error(f"LSTM volatility calculation failed: {lstm_err}")
-                # Fallback to constant historical volatility on LSTM error
                 sigma = log_returns.std() * np.sqrt(252)
                 sigma_display_name = f"LSTM Error - Fallback Constant ({sigma:.4f})"
-                # Optionally, return an error to the user:
-                # return jsonify({"error": f"LSTM volatility calculation error: {str(lstm_err)}"}), 500
         elif vol_source == "garch":
             try:
                 from garch_helper import get_garch_volatility 
@@ -360,18 +377,34 @@ def route_historical_price():
                 app.logger.error("GARCH helper not found, falling back to constant volatility.")
                 sigma = log_returns.std() * np.sqrt(252)
                 sigma_display_name = f"GARCH Error - Fallback Constant ({sigma:.4f})"
-                # return jsonify({"error": "GARCH model processing failed (helper not found). Please select another volatility source."}), 500
             except Exception as e_garch:
                 app.logger.error(f"GARCH volatility calculation failed: {e_garch}")
                 sigma = log_returns.std() * np.sqrt(252)
                 sigma_display_name = f"GARCH Error - Fallback Constant ({sigma:.4f})"
-                # return jsonify({"error": f"GARCH volatility calculation error: {str(e_garch)}"}), 500
-        else:  # default to "constant" vol
+        elif vol_source == "short_term_historical":
+            short_term_days = 21 # Approx 1 month of trading days
+            if len(log_returns) >= short_term_days:
+                short_term_log_returns = log_returns.tail(short_term_days)
+                sigma = short_term_log_returns.std() * np.sqrt(252)
+                sigma_display_name = "Short-term Historical (1M)"
+                if np.isnan(sigma) or sigma <= 0:
+                    app.logger.warning(f"Short-term volatility calculation resulted in invalid value ({sigma}). Falling back to full historical.")
+                    sigma = log_returns.std() * np.sqrt(252)
+                    sigma_display_name = f"Short-term Invalid - Fallback Constant ({sigma:.4f})"
+            else:
+                app.logger.warning(f"Not enough data for short-term volatility ({len(log_returns)} days < {short_term_days}). Falling back to full historical.")
+                sigma = log_returns.std() * np.sqrt(252)
+                sigma_display_name = f"Short-term Insufficient Data - Fallback Constant ({sigma:.4f})"
+        else:  # default to "constant" vol (full period historical)
             sigma = log_returns.std() * np.sqrt(252)
-            # sigma_display_name is already "Constant (Historical)"
 
-        if np.isnan(sigma) or sigma <= 0: # Sigma must be positive
-            return jsonify({"error": f"Could not calculate valid positive volatility for {ticker_str} (source: {vol_source}, calculated value: {sigma})."}), 400
+        if np.isnan(sigma) or sigma <= 0:
+            app.logger.error(f"Final sigma value is invalid ({sigma}) for source '{vol_source}'. Attempting default historical.")
+            sigma = hist_vol['LogReturn'].dropna().std() * np.sqrt(252)
+            sigma_display_name = f"Error - Fallback Constant ({sigma:.4f})"
+            if np.isnan(sigma) or sigma <= 0:
+                 return jsonify({"error": f"Could not calculate any valid positive volatility for {ticker_str} (final value: {sigma})."}), 400
+
 
         T = (expiry_date - quote_date).days / 365.0
         if T <= 0:
@@ -448,7 +481,14 @@ def route_historical_price():
             "r": r,
             "price": price,
             "plot": plot_json,
-            "volatility_source": sigma_display_name # Added for frontend display
+            "volatility_source": sigma_display_name, # Added for frontend display
+            "volatility_chart_data": { # New data for the volatility chart
+                "dates_historical": vol_chart_dates_historical,
+                "values_historical": vol_chart_values_historical,
+                "quote_date": quote_date_str,
+                "expiry_date": expiry_date_str, 
+                "predicted_sigma": sigma 
+            }
         }
         if model == "monte_carlo":
             final_response.update(analytics_package)
@@ -462,6 +502,7 @@ def route_historical_price():
         return jsonify({"error": f"An error occurred processing the historical data: {str(e)}"}), 500
 
 
+# --- Black-Scholes Plotting ---
 def plot_black_scholes(data):
     K = float(data["K"])
     T = data["T"]
@@ -493,6 +534,7 @@ def plot_black_scholes(data):
     return {"plot": graphJSON, "price": price_at_S}
 
 
+# --- GBM Simulation Plotting ---
 def plot_gbm_simulation(S0, K_strike, T, r, sigma, steps=100, num_paths=100):
     time_array, paths = simulate_gbm_paths(S0, T, r, sigma, steps, num_paths)
     fig = go.Figure()
@@ -526,6 +568,7 @@ def plot_gbm_simulation(S0, K_strike, T, r, sigma, steps=100, num_paths=100):
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
 
+# --- Binomial Model Plotting ---
 def plot_binomial(data):
     S_user = data["S"]
     K = float(data["K"])
@@ -564,6 +607,7 @@ def plot_binomial(data):
     }
 
 
+# --- PDE Model Plotting ---
 def plot_pde(data):
     S_user = data["S"]
     K = float(data["K"])
@@ -598,6 +642,7 @@ def plot_pde(data):
     }
 
 
+# --- Run Flask App ---
 if __name__ == "__main__":
     app.run(debug=True)
 

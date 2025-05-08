@@ -1,7 +1,12 @@
+# --- Imports ---
 import pandas as pd
 import numpy as np
-from arch import arch_model # You would uncomment and use this for a real GARCH model
-
+import yfinance as yf
+from arch import arch_model
+import matplotlib.pyplot as plt
+import datetime
+import warnings
+# --- GARCH Volatility Calculation ---
 def get_garch_volatility(log_returns: pd.Series) -> float:
     """
     Calculates GARCH(1,1) forecasted volatility.
@@ -9,31 +14,20 @@ def get_garch_volatility(log_returns: pd.Series) -> float:
     2. Forecast the next-step conditional volatility.
     3. Annualize the forecasted volatility.
     """
-    if log_returns.empty or len(log_returns) < 20: # Need sufficient data for GARCH
+    if log_returns.empty or len(log_returns) < 20:
         print("GARCH Warning: Insufficient data for GARCH. Returning historical volatility.")
         return log_returns.std() * np.sqrt(252) if not log_returns.empty else 0.20
 
     try:
-        # GARCH models prefer returns scaled (e.g., by 100), but we'll use fractional returns
-        # and ensure rescale=False. arch_model handles NaNs by dropping them.
-        # Ensure log_returns are clean (no NaNs that weren't handled, though dropna() is typical)
         cleaned_returns = log_returns.dropna()
         if cleaned_returns.empty or len(cleaned_returns) < 20:
             print("GARCH Warning: Insufficient data after cleaning for GARCH. Returning historical volatility.")
             return log_returns.std() * np.sqrt(252) if not log_returns.empty else 0.20
 
         # Define GARCH(1,1) model
-        # 'Constant' mean, 'Garch' vol, p=1 (ARCH), q=1 (GARCH)
-        # rescale=False is important if returns are not scaled (e.g. by 100)
         model = arch_model(cleaned_returns, vol='Garch', p=1, q=1, mean='Constant', rescale=False)
-        
-        # Fit the model, suppress output
         results = model.fit(disp='off', show_warning=False)
-        
-        # Forecast 1-step ahead variance
         forecast = results.forecast(horizon=1, reindex=False) # reindex=False for simpler access
-        
-        # Get the forecasted variance (h.1 for 1-step ahead)
         forecasted_variance_daily = forecast.variance.iloc[-1, 0]
         
         # Convert daily variance to annualized volatility
@@ -49,12 +43,10 @@ def get_garch_volatility(log_returns: pd.Series) -> float:
 
     except Exception as e:
         print(f"GARCH Model Error: {e}. Falling back to historical volatility.")
-        # Fallback to historical volatility on any error
         return log_returns.dropna().std() * np.sqrt(252) if not log_returns.dropna().empty else 0.20
 
+# --- Testing the Function ---
 if __name__ == '__main__':
-    # Example usage:
-    # Generate more realistic dummy log returns
     np.random.seed(42)
     dummy_log_returns = pd.Series(np.random.normal(loc=0.0005, scale=0.015, size=500)) 
     

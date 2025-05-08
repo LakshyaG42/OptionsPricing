@@ -1,5 +1,7 @@
+# --- Imports ---
 import numpy as np
 
+# --- Simulate GBM Paths ---
 def simulate_gbm_paths(S0, T, r, sigma, steps, num_paths):
     dt = T / steps
     price_paths = np.zeros((steps + 1, num_paths))
@@ -12,6 +14,7 @@ def simulate_gbm_paths(S0, T, r, sigma, steps, num_paths):
 
     return time_array, price_paths
 
+# --- Calculate Option Payoffs ---
 def calculate_payoffs(terminal_prices, K, option_type):
     if option_type.lower() == 'call':
         payoffs = np.maximum(terminal_prices - K, 0)
@@ -21,6 +24,7 @@ def calculate_payoffs(terminal_prices, K, option_type):
         raise ValueError("Invalid option type. Must be 'call' or 'put'.")
     return payoffs
 
+# --- Monte Carlo Option Pricing ---
 def monte_carlo_option_price(S0, K, T, r, sigma, option_type, steps=100, num_paths=1000):
     _, price_paths = simulate_gbm_paths(S0, T, r, sigma, steps, num_paths)
     terminal_prices = price_paths[-1, :]
@@ -29,6 +33,7 @@ def monte_carlo_option_price(S0, K, T, r, sigma, option_type, steps=100, num_pat
     mc_price = np.mean(discounted_payoffs)
     return mc_price, terminal_prices, payoffs
 
+# --- GBM Analytics ---
 def get_gbm_analytics(terminal_prices, payoffs, K, T, r, option_type, option_cost):
     """
     Calculates P&L, summary statistics from GBM simulation results.
@@ -40,7 +45,7 @@ def get_gbm_analytics(terminal_prices, payoffs, K, T, r, option_type, option_cos
     expected_payoff = np.mean(payoffs)
     expected_pnl = np.mean(pnl_values)
     probability_of_profit = np.mean(pnl_values > 0)
-    value_at_risk_5_percent = np.percentile(pnl_values, 5) # 5th percentile of P&L
+    value_at_risk_5_percent = np.percentile(pnl_values, 5)
     
     avg_final_stock_price = np.mean(terminal_prices)
     median_final_stock_price = np.median(terminal_prices)
@@ -51,7 +56,7 @@ def get_gbm_analytics(terminal_prices, payoffs, K, T, r, option_type, option_cos
         prob_itm = np.mean(terminal_prices < K)
 
     stats = {
-        "monte_carlo_price_from_sim": f"${(np.exp(-r * T) * expected_payoff):.4f}", # For consistency check
+        "monte_carlo_price_from_sim": f"${(np.exp(-r * T) * expected_payoff):.4f}",
         "expected_payoff": f"${expected_payoff:.4f}",
         "expected_pnl_vs_model_price": f"${expected_pnl:.4f}",
         "probability_of_profit_vs_model_price": f"{probability_of_profit:.2%}",
@@ -62,6 +67,6 @@ def get_gbm_analytics(terminal_prices, payoffs, K, T, r, option_type, option_cos
     }
     
     # Terminal Prices Histogram Data
-    terminal_prices_counts, terminal_prices_bin_edges = np.histogram(terminal_prices, bins=30) # Increased bins for more detail
+    terminal_prices_counts, terminal_prices_bin_edges = np.histogram(terminal_prices, bins=30)
     
     return stats, terminal_prices_counts.tolist(), terminal_prices_bin_edges.tolist()
