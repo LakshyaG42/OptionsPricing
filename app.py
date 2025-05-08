@@ -88,7 +88,6 @@ def plot_terminal_prices_histogram(terminal_prices_counts, terminal_prices_bin_e
             xref='x', yref='y',
             text=f'Strike K={K_strike:.2f}', showarrow=True, arrowhead=1, ax=20, ay=-30
         )],
-        margin=dict(l=40, r=20, t=40, b=30), # Adjust margins
         autosize=True # Ensure autosize
     )
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
@@ -244,14 +243,10 @@ def route_plot():
 
     if model == "black_scholes":
         result = plot_black_scholes(data)
-        analytics_package = generate_full_analytics_package(data, result["price"], "Black-Scholes", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
-        result.update(analytics_package)
         return jsonify(result)
 
     elif model == "binomial":
         result = plot_binomial(data)
-        analytics_package = generate_full_analytics_package(data, result["price"], "Binomial", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
-        result.update(analytics_package)
         return jsonify(result)
 
     elif model == "monte_carlo":
@@ -259,7 +254,7 @@ def route_plot():
         analytics_package = generate_full_analytics_package(data, bs_ref_price, "Monte Carlo (GBM Analytics)", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
         
         mc_price_from_sim = analytics_package.get("monte_carlo_price_from_analytics_sim")
-        if isinstance(mc_price_from_sim, str) and mc_price_from_sim.startswith("$"):
+        if isinstance(mc_price_from_sim, str):
             try:
                 mc_price_value = float(mc_price_from_sim.replace("$",""))
             except ValueError:
@@ -270,16 +265,14 @@ def route_plot():
         return jsonify({
             "price": mc_price_value,
             "plot": None,
-            "gbm_simulation_plot": analytics_package["gbm_simulation_plot"],
-            "gbm_summary_stats": analytics_package["gbm_summary_stats"],
-            "terminal_prices_histogram_plot": analytics_package["terminal_prices_histogram_plot"],
+            "gbm_simulation_plot": analytics_package.get("gbm_simulation_plot"),
+            "gbm_summary_stats": analytics_package.get("gbm_summary_stats"),
+            "terminal_prices_histogram_plot": analytics_package.get("terminal_prices_histogram_plot"),
             "monte_carlo_price_from_analytics_sim": mc_price_value
         })
 
     elif model == "pde":
         result = plot_pde(data)
-        analytics_package = generate_full_analytics_package(data, result["price"], "PDE", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
-        result.update(analytics_package)
         return jsonify(result)
 
     else:
@@ -297,7 +290,6 @@ def route_historical_price():
     model = data.get("model", "black_scholes")
     exercise_style = data.get("exercise_style", "european")
     
-    # Default values for analytics simulations from historical context
     num_paths_analytics = data.get("n_simulations", 1000) 
     num_steps_analytics = data.get("n_steps", 100)
 
@@ -371,25 +363,21 @@ def route_historical_price():
         price = None
         plot_json = None
         analytics_package = {}
-        plot_result = {}
 
         if model == "black_scholes":
             plot_result = plot_black_scholes(plot_data)
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
-            analytics_package = generate_full_analytics_package(plot_data, price, "Black-Scholes", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
         elif model == "binomial":
-            plot_data["n_steps"] = data.get("n_steps", 100)
             plot_result = plot_binomial(plot_data)
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
-            analytics_package = generate_full_analytics_package(plot_data, price, "Binomial", num_paths_sim=num_paths_analytics, num_steps_sim=plot_data["n_steps"])
         elif model == "monte_carlo":
             bs_ref_price = price_option(S, K, T, r, sigma, option_type)
             analytics_package = generate_full_analytics_package(plot_data, bs_ref_price, "Monte Carlo (GBM Analytics)", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
             
             mc_price_from_sim_hist = analytics_package.get("monte_carlo_price_from_analytics_sim")
-            if isinstance(mc_price_from_sim_hist, str) and mc_price_from_sim_hist.startswith("$"):
+            if isinstance(mc_price_from_sim_hist, str):
                 try:
                     price = float(mc_price_from_sim_hist.replace("$",""))
                 except ValueError:
@@ -398,17 +386,13 @@ def route_historical_price():
                 price = mc_price_from_sim_hist
 
             plot_json = None
-            plot_result = {"price": price, "plot": plot_json}
         elif model == "pde":
             if american:
-                app.logger.warning("PDE model requested with American style, forcing European.")
+                app.logger.warning("PDE model requested with American style for historical, forcing European.")
                 plot_data["exercise_style"] = 'european'
-            plot_data["n_t"] = data.get("n_t", 1000)
-            plot_data["x_max"] = data.get("x_max", S * 2)
             plot_result = plot_pde(plot_data)
             price = plot_result.get("price")
             plot_json = plot_result.get("plot")
-            analytics_package = generate_full_analytics_package(plot_data, price, "PDE", num_paths_sim=num_paths_analytics, num_steps_sim=num_steps_analytics)
         else:
             return jsonify({"error": f"Model '{model}' not supported for historical pricing/plotting yet."}), 400
 
@@ -420,7 +404,8 @@ def route_historical_price():
             "price": price,
             "plot": plot_json,
         }
-        final_response.update(analytics_package)
+        if model == "monte_carlo":
+            final_response.update(analytics_package)
         return jsonify(final_response)
 
     except ValueError as ve:
@@ -450,9 +435,12 @@ def plot_black_scholes(data):
     fig.add_trace(go.Scatter(x=S_range, y=prices, mode='lines+markers', name='Option Price'))
     fig.add_trace(go.Scatter(x=[S_user], y=[price_option(S_user, K, T, r, sigma, option_type)],
                              mode='markers', marker=dict(color='red', size=10), name='Current S'))
-    fig.update_layout(title='Black-Scholes Option Price',
-                      xaxis_title='Stock Price (S)',
-                      yaxis_title='Option Price')
+    fig.update_layout(
+        title='Black-Scholes Option Price',
+        xaxis_title='Stock Price (S)',
+        yaxis_title='Option Price',
+        autosize=True,
+    )
 
     price_at_S = price_option(S_user, K, T, r, sigma, option_type)
     graphJSON = json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
@@ -488,7 +476,6 @@ def plot_gbm_simulation(S0, K_strike, T, r, sigma, steps=100, num_paths=100):
     fig.update_layout(title=f"GBM Stock Price Simulations (K={K_strike:.2f})",
                       xaxis_title='Time (Years)',
                       yaxis_title='Stock Price',
-                      margin=dict(l=40, r=20, t=40, b=30), # Adjust margins
                       autosize=True) # Ensure autosize
     return json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder)
 
@@ -518,9 +505,12 @@ def plot_binomial(data):
     user_price = binomial_price(S_user, K, T, r, sigma, n_steps=n_steps, option_type=option_type, american=american)
     fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
                              mode='markers', marker=dict(color='red', size=10), name='Current S'))
-    fig.update_layout(title='Binomial Option Price',
-                      xaxis_title='Stock Price (S)',
-                      yaxis_title='Option Price')
+    fig.update_layout(
+        title='Binomial Option Price',
+        xaxis_title='Stock Price (S)',
+        yaxis_title='Option Price',
+        autosize=True,
+    )
 
     return {
         "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
@@ -534,7 +524,7 @@ def plot_pde(data):
     T = data["T"]
     r = data["r"]
     sigma = data["sigma"]
-    x_max_default = 200 if data.get("option_type", "call") == 'call' else 3.0
+    x_max_default = 200 if data.get("option_type", "call") == 'call' else S_user * 2 # Adjusted default for put
     x_max = data.get("x_max", x_max_default)
     n_t = data.get("n_t", 1000)
 
@@ -543,15 +533,18 @@ def plot_pde(data):
     if option_type == "call":
         x, V, user_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t)
     else:
-        x, V, user_price = crank_nicolson_put(S_user, K, sigma, T, x_max=x_max, N_t=n_t)
+        x, V, user_price = crank_nicolson_put(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t) # Added r for put
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=x, y=V, mode='lines', name='CN Price'))
     fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
                              mode='markers', marker=dict(color='red', size=10), name='Current S'))
-    fig.update_layout(title='Crank–Nicolson Option Price',
-                      xaxis_title='Stock Price (S)',
-                      yaxis_title='Option Price')
+    fig.update_layout(
+        title='Crank–Nicolson Option Price',
+        xaxis_title='Stock Price (S)',
+        yaxis_title='Option Price',
+        autosize=True,
+    )
 
     return {
         "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),

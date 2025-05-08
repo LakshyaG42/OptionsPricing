@@ -121,7 +121,7 @@
                 <option value="american">American</option>
             </select><br>
 
-            <button type="submit">Get Real Price</button>
+            <button type="submit">Get Price & Plot</button>
         </form>
 
         <!-- Display Calculated Historical Parameters -->
@@ -135,9 +135,21 @@
     </div>
 
     <div class="plot-container">
-        <!-- Primary display area: Main model plot OR "All Models" summary plot -->
+        <!-- Primary display area: Main model plot OR "All Models" summary plot OR MC Analytics -->
         <div id="primary-plot-area">
-            <div id="plot"></div> <!-- BS, Binomial, PDE plot, OR "All Models" price bar chart -->
+            <!-- Container for standard plots (BS, Binomial, PDE, All Models Bar Chart) -->
+            <div id="standard-plot-display-area" style="display: block;"> <!-- Default visible -->
+                <div id="plot"></div>
+            </div>
+
+            <!-- Container for Monte Carlo specific analytics plots -->
+            <div id="monte-carlo-primary-analytics-display-area" style="display: none;"> <!-- Default hidden -->
+                <h4>Simulation Analytics</h4>
+                <div class="analytics-grid">
+                    <div id="gbm_plot_div" class="analytics-grid-item"></div>
+                    <div id="terminal_prices_histogram_div" class="analytics-grid-item"></div>
+                </div>
+            </div>
             <p id="output"></p>
             <button id="rerunButton" style="display: none;">Rerun Simulations</button>
         </div>
@@ -149,13 +161,9 @@
             <div id="error_bar_chart_div"></div>
         </div>
 
-        <!-- Secondary display area for individual model analytics (GBM, P&L, Summary) -->
-        <div id="analytics-area" class="results-section" style="display: none;">
-            <h4>Simulation Analytics</h4>
-            <div class="analytics-grid">
-                <div id="gbm_plot_div" class="analytics-grid-item"></div>
-                <div id="terminal_prices_histogram_div" class="analytics-grid-item"></div>
-            </div>
+        <!-- Secondary display area for GBM Summary Statistics (used by Monte Carlo) -->
+        <div id="analytics-summary-container" class="results-section" style="display: none;">
+            <!-- Title for summary can be added here or dynamically via JS if needed -->
             <div id="gbm_analytics_summary_div" class="analytics-summary"></div>
         </div>
     </div>
