@@ -17,7 +17,13 @@ from datetime import datetime, timedelta
 # Models
 from models.black_scholes import price_option
 from models.binomial import binomial_price
-from models.pde import crank_nicolson_call, crank_nicolson_put
+try:
+    from models.pde_cython import crank_nicolson_call_cython as crank_nicolson_call
+    from models.pde_cython import crank_nicolson_put_cython as crank_nicolson_put
+    print("Successfully imported Cython PDE solver.")
+except ImportError:
+    print("Cython PDE solver not found, falling back to Python version.")
+    from models.pde import crank_nicolson_call, crank_nicolson_put
 from models.gbm import simulate_gbm_paths, calculate_payoffs, get_gbm_analytics
 
 
@@ -180,7 +186,7 @@ def plot_all_models_data(data, market_price_from_payload):
     if option_type == "call":
         _, _, pde_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max_pde, N_t=n_t_pde)
     else: # put
-        _, _, pde_price = crank_nicolson_put(S_user, K, sigma, T, x_max=x_max_pde, N_t=n_t_pde)
+        _, _, pde_price = crank_nicolson_put(S_user, K, sigma, T, r, x_max=x_max_pde, N_t=n_t_pde)
     print("PDE price:", pde_price)
 
     # Generate bar chart for model prices
@@ -609,25 +615,24 @@ def plot_binomial(data):
 
 # --- PDE Model Plotting ---
 def plot_pde(data):
-    S_user = data["S"]
+    S = data["S"]
     K = float(data["K"])
+    sigma = data["sigma"]
     T = data["T"]
     r = data["r"]
-    sigma = data["sigma"]
-    x_max_default = 200 if data.get("option_type", "call") == 'call' else S_user * 2 # Adjusted default for put
-    x_max = data.get("x_max", x_max_default)
-    n_t = data.get("n_t", 1000)
-
-    option_type = data.get("option_type", "call")
+    option_type = data["option_type"]
+    x_max = data.get("x_max", 200)
+    N_t = data.get("n_t", 1000)
 
     if option_type == "call":
-        x, V, user_price = crank_nicolson_call(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t)
-    else:
-        x, V, user_price = crank_nicolson_put(S_user, K, sigma, T, r, x_max=x_max, N_t=n_t) # Added r for put
+        x_range, V_grid, price = crank_nicolson_call(S, K, sigma, T, r, x_max=x_max, N_t=N_t)
+    else: # put
+        x_range, V_grid, price = crank_nicolson_put(S, K, sigma, T, r, x_max=x_max, N_t=N_t)
 
+    # Create Plotly figure
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=V, mode='lines', name='CN Price'))
-    fig.add_trace(go.Scatter(x=[S_user], y=[user_price],
+    fig.add_trace(go.Scatter(x=x_range, y=V_grid, mode='lines', name='CN Price'))
+    fig.add_trace(go.Scatter(x=[S], y=[price],
                              mode='markers', marker=dict(color='red', size=10), name='Current S'))
     fig.update_layout(
         title='Crank–Nicolson Option Price',
@@ -638,7 +643,7 @@ def plot_pde(data):
 
     return {
         "plot": json.dumps(fig, cls=plotly.utils.PlotlyJSONEncoder),
-        "price": user_price
+        "price": price
     }
 
 
