@@ -1,126 +1,125 @@
-# filepath: c:\Users\laksh\OneDrive\Documents\GitHub\OptionsPricing\models\pde_cython.pyx
+# distutils: language=c
+# cython: language_level=3
+
 import numpy as np
-from scipy.linalg import solve_banded
-import math
-
-# It's good practice to cimport numpy
 cimport numpy as np
+from libc.math cimport exp # Use the C math library for speed
 
-# Cython needs to know the data types of numpy arrays at compile time
-DTYPE = np.float
-ctypedef np.float_t DTYPE_t
+# Define the float type for consistency and precision.
+DTYPE = np.float64
+ctypedef np.float64_t DTYPE_t
 
-def norm_cdf(x):
-    return 0.5 * (1 + math.erf(x / math.sqrt(2)))
+# -----------------------------------------------------------------------------
+# Private C-Functions for Maximum Performance
+# -----------------------------------------------------------------------------
 
-def bs_put_price(S, K, sigma, T):
-    if S <= 0:
-        return K
-    d1 = (math.log(S / K) + 0.5 * sigma * sigma * T) / (sigma * math.sqrt(T))
-    d2 = d1 - sigma * math.sqrt(T)
-    return K * norm_cdf(-d2) - S * norm_cdf(-d1)
+# Use a C-style function directive for cdef functions instead of a decorator
+cdef void _thomas_algorithm_cython(
+    DTYPE_t[:] a, DTYPE_t[:] b, DTYPE_t[:] c, DTYPE_t[:] d, DTYPE_t[:] out_x
+) nogil with gil:
+    """
+    Solves a tridiagonal system Ax = d using the Thomas Algorithm (TDMA).
+    This runs entirely in C and is extremely fast.
+    """
+    cdef int n = d.shape[0]
+    cdef int i
 
-def solve_tridiagonal_scipy(a, b, c, d):
-    n = len(b)
-    ab = np.zeros((3, n))
-    ab[0, 1:] = c[:n-1] 
-    ab[1, :] = b         
-    ab[2, :-1] = a[1:]  
-    x = solve_banded((1, 1), ab, d)
-    return x
+    # Forward elimination pass
+    for i in range(1, n):
+        w = a[i] / b[i - 1]
+        b[i] = b[i] - w * c[i - 1]
+        d[i] = d[i] - w * d[i - 1]
 
-cpdef crank_nicolson_call_cython(double S, double K, double sigma, double T, double r, int x_max=200, int N_t=1000):
-    cdef double dt = T / N_t
-    cdef double S_max = 2 * K + 50
-    cdef int Nx = int(x_max / (2 * dt))
-    cdef double dx = S_max / Nx
-    
-    cdef np.ndarray[DTYPE_t, ndim=1] x = np.linspace(0, S_max, Nx + 1)
-    cdef np.ndarray[DTYPE_t, ndim=1] V = np.maximum(x - K, 0)
-    
-    cdef int n = Nx - 1
-    cdef np.ndarray[DTYPE_t, ndim=1] alpha = (sigma**2 * x[1:Nx]**2 * dt) / (4 * dx**2)
-    
-    cdef np.ndarray[DTYPE_t, ndim=1] a = np.zeros(n)
-    cdef np.ndarray[DTYPE_t, ndim=1] b = np.ones(n) + 2 * alpha
-    cdef np.ndarray[DTYPE_t, ndim=1] c = np.zeros(n)
-    
-    a[1:] = -alpha[1:]
-    c[:-1] = -alpha[:-1]
+    # Backward substitution pass
+    out_x[n - 1] = d[n - 1] / b[n - 1]
+    for i in range(n - 2, -1, -1):
+        out_x[i] = (d[i] - c[i] * out_x[i + 1]) / b[i]
 
-    cdef np.ndarray[DTYPE_t, ndim=1] V_old = np.copy(V)
-    cdef np.ndarray[DTYPE_t, ndim=1] d = np.zeros(n)
-    
-    cdef int j, step
-    cdef double tau
 
+# This pure C function now ONLY contains the hot loop. No numpy creation.
+cdef void _run_cn_loop(
+    int N_t, int N_x, double K, double r, double dt, double S_max,
+    DTYPE_t[:] V, DTYPE_t[:] M2_a, DTYPE_t[:] M2_b, DTYPE_t[:] M2_c, 
+    DTYPE_t[:] alpha, DTYPE_t[:] beta, DTYPE_t[:] gamma, bytes option_type
+) nogil with gil:
+    """
+    Contains only the performance-critical time-stepping loop.
+    Receives all arrays pre-built from the python-aware wrapper.
+    """
+    cdef int n = N_x - 1
+    cdef DTYPE_t[:] d = np.zeros(n, dtype=DTYPE)
+    cdef int step, i
+
+    # Main time-stepping loop
     for step in range(N_t):
-        tau = (step + 1) * dt
-        V_old[:] = V
-        
-        d = alpha * V_old[:-2] + (1 - 2 * alpha) * V_old[1:-1] + alpha * V_old[2:]
-        
-        # Boundary contribution
-        d[-1] += alpha[-1] * (S_max - K * math.exp(-r * tau))
+        # Calculate the right-hand side vector `d` from the explicit part
+        for i in range(n):
+            d[i] = alpha[i]*V[i] + (1.0 + beta[i])*V[i+1] + gamma[i]*V[i+2]
 
-        # Solve tridiagonal system
-        ab = np.zeros((3, n))
-        ab[0, 1:] = c[:-1]
-        ab[1, :] = b
-        ab[2, :-1] = a[1:]
-        V[1:Nx] = solve_banded((1, 1), ab, d)
+        # Apply boundary conditions to the `d` vector
+        if option_type == b'call':
+            d[n-1] += gamma[n-1] * (S_max - K * exp(-r * (step) * dt)) # Boundary for call
+        else: # Put
+            d[0] += alpha[0] * K * exp(-r * (step + 1) * dt)
 
-        V[0] = 0
-        V[-1] = S_max - K * math.exp(-r * tau)
+        # Solve the tridiagonal system M2 * V_new = d
+        _thomas_algorithm_cython(M2_a.copy(), M2_b.copy(), M2_c.copy(), d, V[1:n+1])
 
-    # Interpolate final price at S
-    idx = (np.abs(x - S)).argmin()
-    return x.tolist(), V.tolist(), V[idx]
+        # Enforce boundary conditions on V for the next iteration
+        if option_type == b'call':
+            V[0] = 0.0
+            V[N_x] = S_max - K * exp(-r * (step + 1) * dt)
+        else: # Put
+            V[0] = K * exp(-r * (step + 1) * dt)
+            V[N_x] = 0.0
 
-cpdef crank_nicolson_put_cython(double S, double K, double sigma, double T, double r, int x_max=3, int N_t=1000):
+# -----------------------------------------------------------------------------
+# Public-Facing Python Wrappers
+# -----------------------------------------------------------------------------
+
+cpdef tuple crank_nicolson(
+    double S, double K, double sigma, double T, double r,
+    bytes option_type, int S_max_mult=2, int N_t=1000, int N_x=200):
+    """
+    Prices a European option using the Crank-Nicolson finite difference method.
+    This function handles all NumPy array creation and Python-level logic.
+
+    Args:
+        option_type (bytes): b'call' or b'put'
+
+    Returns:
+        A tuple containing: (Stock Price Grid, Option Value Grid, Price at S).
+    """
+    # --- All NumPy creation happens here, in the Python-aware function ---
+    cdef double S_max = S_max_mult * K
     cdef double dt = T / N_t
-    cdef double S_max = 2 * K + 50
-    cdef int Nx = int(x_max / (2 * dt))
-    cdef double dx = S_max / Nx
-    
-    cdef np.ndarray[DTYPE_t, ndim=1] x = np.linspace(0, S_max, Nx + 1)
-    cdef np.ndarray[DTYPE_t, ndim=1] V = np.maximum(K - x, 0)
-    
-    cdef int n = Nx - 1
-    cdef np.ndarray[DTYPE_t, ndim=1] alpha = (sigma**2 * x[1:Nx]**2 * dt) / (4 * dx**2)
-    
-    cdef np.ndarray[DTYPE_t, ndim=1] a = np.zeros(n)
-    cdef np.ndarray[DTYPE_t, ndim=1] b = np.ones(n) + 2 * alpha
-    cdef np.ndarray[DTYPE_t, ndim=1] c = np.zeros(n)
-    
-    a[1:] = -alpha[1:]
-    c[:-1] = -alpha[:-1]
+    cdef np.ndarray[DTYPE_t, ndim=1] x = np.linspace(0, S_max, N_x + 1, dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] V = np.zeros(N_x + 1, dtype=DTYPE)
 
-    cdef np.ndarray[DTYPE_t, ndim=1] V_old = np.copy(V)
-    cdef np.ndarray[DTYPE_t, ndim=1] d = np.zeros(n)
-    
-    cdef int j, step
-    cdef double tau
+    # Set initial condition (payoff)
+    if option_type == b'call':
+        V[:] = np.maximum(x - K, 0.0)
+    elif option_type == b'put':
+        V[:] = np.maximum(K - x, 0.0)
+    else:
+        raise ValueError("option_type must be b'call' or b'put'")
 
-    for step in range(N_t):
-        tau = (step + 1) * dt
-        V_old[:] = V
-        
-        d = alpha * V_old[:-2] + (1 - 2 * alpha) * V_old[1:-1] + alpha * V_old[2:]
-        
-        # Boundary contribution
-        d[0] += alpha[0] * K * math.exp(-r * tau)
+    # Setup coefficients for the tridiagonal matrices
+    cdef int n = N_x - 1
+    cdef np.ndarray[DTYPE_t, ndim=1] i_vec = np.arange(1, N_x, dtype=DTYPE)
+    cdef np.ndarray[DTYPE_t, ndim=1] alpha = 0.25 * dt * (sigma**2 * i_vec**2 - r * i_vec)
+    cdef np.ndarray[DTYPE_t, ndim=1] beta = -0.5 * dt * (sigma**2 * i_vec**2 + r)
+    cdef np.ndarray[DTYPE_t, ndim=1] gamma = 0.25 * dt * (sigma**2 * i_vec**2 + r * i_vec)
 
-        # Solve tridiagonal system
-        ab = np.zeros((3, n))
-        ab[0, 1:] = c[:-1]
-        ab[1, :] = b
-        ab[2, :-1] = a[1:]
-        V[1:Nx] = solve_banded((1, 1), ab, d)
+    # Constant matrix M2 for the implicit part
+    cdef np.ndarray[DTYPE_t, ndim=1] M2_a = -alpha
+    cdef np.ndarray[DTYPE_t, ndim=1] M2_b = 1.0 - beta
+    cdef np.ndarray[DTYPE_t, ndim=1] M2_c = -gamma
 
-        V[0] = K * math.exp(-r * tau)
-        V[-1] = 0
+    # --- Call the high-performance C function to run the main loop ---
+    _run_cn_loop(N_t, N_x, K, r, dt, S_max, V, M2_a, M2_b, M2_c, alpha, beta, gamma, option_type)
 
-    # Interpolate final price at S
-    idx = (np.abs(x - S)).argmin()
-    return x.tolist(), V.tolist(), V[idx]
+    # Interpolate to find the price at the initial stock price S
+    price = np.interp(S, x, V)
+
+    return np.asarray(x), np.asarray(V), price
